@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { guardarCalidad } from "@/app/calidad/actions";
 
+// Se mantiene exportado por compatibilidad con quien importe el tipo,
+// aunque el formulario ya no elige lote: toda carga de calidad queda
+// "suelta" (planta/producto/productor/contrato) y se vincula a un lote
+// después, desde la sección de administrador en /calidad.
 type Rel = { nombre: string }[] | { nombre: string } | null;
-function nombreDe(rel: Rel): string {
-  if (!rel) return "";
-  return Array.isArray(rel) ? rel[0]?.nombre ?? "" : rel.nombre;
-}
 
 export type LoteParaCalidad = {
   id: string;
@@ -24,7 +24,6 @@ export type OpcionCatalogo = { id: string; nombre: string };
 const CLAVE_BORRADOR = "calidad-draft-v1";
 
 type Borrador = {
-  lote_id: string;
   planta_id: string;
   producto_id: string;
   productor_id: string;
@@ -38,7 +37,6 @@ type Borrador = {
 
 function borradorVacio(hoy: string): Borrador {
   return {
-    lote_id: "",
     planta_id: "",
     producto_id: "",
     productor_id: "",
@@ -52,12 +50,10 @@ function borradorVacio(hoy: string): Borrador {
 }
 
 export default function CalidadForm({
-  lotes,
   plantas,
   productos,
   productores,
 }: {
-  lotes: LoteParaCalidad[];
   plantas: OpcionCatalogo[];
   productos: OpcionCatalogo[];
   productores: OpcionCatalogo[];
@@ -157,17 +153,13 @@ export default function CalidadForm({
     await intentarEnviar(formData);
   }
 
-  const hayLotes = lotes.length > 0;
-  const loteElegido = hayLotes ? campos.lote_id : "";
-  const esSuelto = !loteElegido;
-
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="font-medium text-brand-navy mb-1">Cargar calidad</h2>
       <p className="text-xs text-gray-500 mb-4">
-        Sacá la foto ahí mismo con el celular. Si el lote todavía no está
-        cargado en el sistema, elegí planta y producto igual: se puede
-        vincular al lote más adelante.
+        Sacá la foto ahí mismo con el celular. No hace falta elegir el lote:
+        con planta, producto, productor y contrato (si lo tenés) alcanza. Se
+        vincula al lote más adelante desde el panel de administración.
       </p>
 
       {huboBorrador && (
@@ -178,87 +170,64 @@ export default function CalidadForm({
       )}
 
       <form ref={formRef} id="form-calidad" action={handleSubmit} className="space-y-4">
-        {hayLotes && (
-          <Campo label="Lote (si ya está cargado)">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 rounded p-3">
+          <Campo label="Planta">
             <select
-              name="lote_id"
+              name="planta_id"
+              required
               className="input"
-              value={campos.lote_id}
-              onChange={(e) => actualizar("lote_id", e.target.value)}
+              value={campos.planta_id}
+              onChange={(e) => actualizar("planta_id", e.target.value)}
             >
-              <option value="">Todavía no está cargado / no lo sé</option>
-              {lotes.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {nombreDe(l.plantas)} · {nombreDe(l.productos)} ·{" "}
-                  {nombreDe(l.productores)}
-                  {l.numero_cp ? ` · CP ${l.numero_cp}` : ""} ({l.estado})
-                  {l.tieneCalidad ? " — ya tiene calidad cargada" : ""}
+              <option value="">Seleccionar…</option>
+              {plantas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
                 </option>
               ))}
             </select>
           </Campo>
-        )}
-
-        {esSuelto && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 rounded p-3">
-            <Campo label="Planta">
-              <select
-                name="planta_id"
-                required={esSuelto}
-                className="input"
-                value={campos.planta_id}
-                onChange={(e) => actualizar("planta_id", e.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {plantas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo label="Producto">
-              <select
-                name="producto_id"
-                required={esSuelto}
-                className="input"
-                value={campos.producto_id}
-                onChange={(e) => actualizar("producto_id", e.target.value)}
-              >
-                <option value="">Seleccionar…</option>
-                {productos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo label="Productor (opcional)">
-              <select
-                name="productor_id"
-                className="input"
-                value={campos.productor_id}
-                onChange={(e) => actualizar("productor_id", e.target.value)}
-              >
-                <option value="">No lo sé todavía</option>
-                {productores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo label="Número de contrato (si tuviera)">
-              <input
-                name="numero_contrato"
-                type="text"
-                className="input"
-                value={campos.numero_contrato}
-                onChange={(e) => actualizar("numero_contrato", e.target.value)}
-              />
-            </Campo>
-          </div>
-        )}
+          <Campo label="Producto">
+            <select
+              name="producto_id"
+              required
+              className="input"
+              value={campos.producto_id}
+              onChange={(e) => actualizar("producto_id", e.target.value)}
+            >
+              <option value="">Seleccionar…</option>
+              {productos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo label="Productor (opcional)">
+            <select
+              name="productor_id"
+              className="input"
+              value={campos.productor_id}
+              onChange={(e) => actualizar("productor_id", e.target.value)}
+            >
+              <option value="">No lo sé todavía</option>
+              {productores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo label="Número de contrato (si tuviera)">
+            <input
+              name="numero_contrato"
+              type="text"
+              className="input"
+              value={campos.numero_contrato}
+              onChange={(e) => actualizar("numero_contrato", e.target.value)}
+            />
+          </Campo>
+        </div>
 
         <Campo label="Fecha">
           <input
