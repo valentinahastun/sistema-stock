@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
-import CalidadForm, { type LoteParaCalidad } from "@/components/CalidadForm";
+import CalidadForm from "@/components/CalidadForm";
 import VincularCalidad from "@/components/VincularCalidad";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
@@ -45,18 +45,6 @@ export default async function CalidadPage({
         .order("fecha", { ascending: false })
         .limit(300),
     ]);
-
-  const idsConCalidad = new Set((registros ?? []).map((r) => r.lote_id).filter(Boolean));
-
-  const lotesParaForm: LoteParaCalidad[] = (lotes ?? []).map((l: any) => ({
-    id: l.id,
-    numero_cp: l.numero_cp,
-    estado: l.estado,
-    plantas: l.plantas as Rel,
-    productos: l.productos as Rel,
-    productores: l.productores as Rel,
-    tieneCalidad: idsConCalidad.has(l.id),
-  }));
 
   const lotesParaVincular = (lotes ?? []).map((l: any) => ({
     id: l.id,
@@ -142,7 +130,6 @@ export default async function CalidadPage({
       {puedeCargar && (
         <div className="mb-6 max-w-2xl">
           <CalidadForm
-            lotes={lotesParaForm}
             plantas={plantas ?? []}
             productos={productos ?? []}
             productores={productores ?? []}
@@ -259,3 +246,4 @@ export default async function CalidadPage({
     </div>
   );
 }
+
