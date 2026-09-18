@@ -256,6 +256,41 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         .eq("id", movimiento.lote_id);
       if (errorDelLote) return { ok: false, error: errorDelLote.message };
     } else {
+      // Si este descarte fue generado por "% de caída estimada", también
+      // dio de alta un lote de descarte propio (ej: Descarte Negro) con
+      // su ingreso. Si a ese lote ya se le cargó algo más (un egreso, una
+      // calidad), no se puede deshacer solo: hay que borrar eso primero,
+      // para no dejar un stock de descarte que en realidad no respalda nada.
+      const loteDescarteId: string | null = movimiento.descarte_generado_lote_id ?? null;
+
+      if (loteDescarteId) {
+        const { count: movimientosDelDescarte } = await supabase
+          .from("movimientos_stock")
+          .select("id", { count: "exact", head: true })
+          .eq("lote_id", loteDescarteId);
+
+        if ((movimientosDelDescarte ?? 0) > 1) {
+          return {
+            ok: false,
+            error:
+              "El lote de descarte que generó este % de caída ya tiene otros movimientos cargados encima (por ejemplo un egreso). Borrá esos primero.",
+          };
+        }
+
+        const { count: calidadDelDescarte } = await supabase
+          .from("registros_calidad")
+          .select("id", { count: "exact", head: true })
+          .eq("lote_id", loteDescarteId);
+
+        if ((calidadDelDescarte ?? 0) > 0) {
+          return {
+            ok: false,
+            error:
+              "El lote de descarte que generó este % de caída tiene un registro de calidad vinculado. Desvinculalo antes de borrar.",
+          };
+        }
+      }
+
       const logMov = await registrarEliminacion(
         supabase,
         perfil,
@@ -264,6 +299,58 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         movimiento
       );
       if (!logMov.ok) return logMov;
+
+      if (loteDescarteId) {
+        const { data: movIngresoDescarte } = await supabase
+          .from("movimientos_stock")
+          .select("*")
+          .eq("lote_id", loteDescarteId)
+          .maybeSingle();
+
+        const { data: loteDescarteRow } = await supabase
+          .from("lotes")
+          .select("*")
+          .eq("id", loteDescarteId)
+          .maybeSingle();
+
+        if (movIngresoDescarte) {
+          const logIngresoDescarte = await registrarEliminacion(
+            supabase,
+            perfil,
+            "movimientos_stock",
+            movIngresoDescarte.id,
+            movIngresoDescarte
+          );
+          if (!logIngresoDescarte.ok) return logIngresoDescarte;
+
+          const { error: errorDelIngresoDescarte } = await supabase
+            .from("movimientos_stock")
+            .delete()
+            .eq("id", movIngresoDescarte.id);
+          if (errorDelIngresoDescarte) {
+            return { ok: false, error: errorDelIngresoDescarte.message };
+          }
+        }
+
+        if (loteDescarteRow) {
+          const logLoteDescarte = await registrarEliminacion(
+            supabase,
+            perfil,
+            "lotes",
+            loteDescarteRow.id,
+            loteDescarteRow
+          );
+          if (!logLoteDescarte.ok) return logLoteDescarte;
+
+          const { error: errorDelLoteDescarte } = await supabase
+            .from("lotes")
+            .delete()
+            .eq("id", loteDescarteId);
+          if (errorDelLoteDescarte) {
+            return { ok: false, error: errorDelLoteDescarte.message };
+          }
+        }
+      }
 
       const { error: errorDel } = await supabase
         .from("movimientos_stock")
