@@ -139,10 +139,12 @@ export default async function StockPage({
       </p>
       <p className="text-xs text-gray-400 mt-1">
         Hacé clic en el nombre de la planta para ver el detalle por lote. En
-        los lotes "natural" podés poner un % de caída estimada: es solo para
-        ver cuánto sería descarte y cuánto exportable; no carga ningún
-        movimiento. El descarte real se sigue cargando aparte, desde
-        Movimientos.
+        los lotes "natural" podés poner el % de caída y confirmarlo: eso
+        carga el descarte real sobre ese lote (que pasa a "procesado") y da
+        de alta, como stock propio, el ingreso del producto de descarte
+        correspondiente (por ejemplo Descarte Negro). Si te equivocaste de
+        %, podés borrar ese descarte desde Movimientos y el lote vuelve a
+        quedar "natural" para volver a intentarlo.
       </p>
     </div>
   );
