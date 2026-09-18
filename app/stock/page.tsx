@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
+import FilaStock, { type LoteDetalle } from "@/components/FilaStock";
 
 export default async function StockPage({
   searchParams,
@@ -8,14 +10,38 @@ export default async function StockPage({
   searchParams: { planta_id?: string; producto_id?: string };
 }) {
   const supabase = createClient();
+  const perfil = await getPerfilActual();
+  const puedeEditar = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }] =
+  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
       supabase.from("stock_consolidado").select("*"),
       supabase.from("stock_comprometido").select("*"),
+      supabase
+        .from("stock_lotes")
+        .select(
+          "lote_id, planta_id, producto_id, productor, numero_cp, estado, fecha_ingreso, caida_pct_estimada, stock_actual_tn"
+        )
+        .order("fecha_ingreso", { ascending: false }),
     ]);
+
+  const lotesPorClave = new Map<string, LoteDetalle[]>();
+  (lotes ?? []).forEach((l: any) => {
+    const clave = `${l.planta_id}-${l.producto_id}`;
+    const lista = lotesPorClave.get(clave) ?? [];
+    lista.push({
+      lote_id: l.lote_id,
+      productor: l.productor,
+      numero_cp: l.numero_cp,
+      estado: l.estado,
+      fecha_ingreso: l.fecha_ingreso,
+      stock_actual_tn: Number(l.stock_actual_tn),
+      caida_pct_estimada: l.caida_pct_estimada === null ? null : Number(l.caida_pct_estimada),
+    });
+    lotesPorClave.set(clave, lista);
+  });
 
   const comprometidoPorClave = new Map<string, number>();
   (comprometido ?? []).forEach((c) => {
@@ -86,17 +112,16 @@ export default async function StockPage({
           </thead>
           <tbody>
             {filas.map((f) => (
-              <tr key={`${f.planta_id}-${f.producto_id}`} className="border-b last:border-0">
-                <td className="px-4 py-2">{f.planta}</td>
-                <td className="px-4 py-2">{f.producto}</td>
-                <td className="px-4 py-2 text-right">
-                  {f.stock_disponible_tn.toFixed(2)}
-                </td>
-                <td className="px-4 py-2 text-right">{f.comprometido_tn.toFixed(2)}</td>
-                <td className="px-4 py-2 text-right font-medium">
-                  {f.libre_tn.toFixed(2)}
-                </td>
-              </tr>
+              <FilaStock
+                key={`${f.planta_id}-${f.producto_id}`}
+                planta={f.planta}
+                producto={f.producto}
+                stockDisponibleTn={f.stock_disponible_tn}
+                comprometidoTn={f.comprometido_tn}
+                libreTn={f.libre_tn}
+                lotes={lotesPorClave.get(`${f.planta_id}-${f.producto_id}`) ?? []}
+                puedeEditar={puedeEditar}
+              />
             ))}
             {filas.length === 0 && (
               <tr>
@@ -111,6 +136,13 @@ export default async function StockPage({
 
       <p className="text-sm text-gray-500 mt-3">
         Total disponible: {totalDisponible.toFixed(2)} tn
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        Hacé clic en el nombre de la planta para ver el detalle por lote. En
+        los lotes "natural" podés poner un % de caída estimada: es solo para
+        ver cuánto sería descarte y cuánto exportable; no carga ningún
+        movimiento. El descarte real se sigue cargando aparte, desde
+        Movimientos.
       </p>
     </div>
   );
