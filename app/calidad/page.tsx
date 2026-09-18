@@ -14,7 +14,7 @@ function nombreDe(rel: Rel): string {
 export default async function CalidadPage({
   searchParams,
 }: {
-  searchParams: { planta_id?: string; producto_id?: string };
+  searchParams: { planta_id?: string; producto_id?: string; productor_id?: string };
 }) {
   const perfil = await getPerfilActual();
   const supabase = createClient();
@@ -40,7 +40,7 @@ export default async function CalidadPage({
       supabase
         .from("registros_calidad")
         .select(
-          "id, fecha, pct_bajo_zaranda, pct_partidos, pct_arrugados, pct_otros_granos, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
+          "id, fecha, pct_bajo_zaranda, pct_partidos, pct_arrugados, pct_otros_granos, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
         )
         .order("fecha", { ascending: false })
         .limit(300),
@@ -70,6 +70,7 @@ export default async function CalidadPage({
       numero_cp: string | null;
       planta_id: string;
       producto_id: string;
+      productor_id: string | null;
       plantas: Rel;
       productos: Rel;
       productores: Rel;
@@ -93,6 +94,7 @@ export default async function CalidadPage({
         cp: f.lotes.numero_cp ?? "—",
         planta_id: f.lotes.planta_id,
         producto_id: f.lotes.producto_id,
+        productor_id: f.lotes.productor_id,
         vinculado: true,
       };
     }
@@ -103,6 +105,7 @@ export default async function CalidadPage({
       cp: "—",
       planta_id: f.planta_id,
       producto_id: f.producto_id,
+      productor_id: f.productor_id,
       vinculado: false,
     };
   }
@@ -113,6 +116,9 @@ export default async function CalidadPage({
   }
   if (searchParams.producto_id) {
     filas = filas.filter((f) => datosFila(f).producto_id === searchParams.producto_id);
+  }
+  if (searchParams.productor_id) {
+    filas = filas.filter((f) => datosFila(f).productor_id === searchParams.productor_id);
   }
 
   const sueltos = esAdmin ? todasLasFilas.filter((f) => !f.lote_id) : [];
@@ -167,8 +173,10 @@ export default async function CalidadPage({
       <FiltroStock
         plantas={plantas ?? []}
         productos={productos ?? []}
+        productores={productores ?? []}
         plantaSeleccionada={searchParams.planta_id ?? ""}
         productoSeleccionado={searchParams.producto_id ?? ""}
+        productorSeleccionado={searchParams.productor_id ?? ""}
         basePath="/calidad"
       />
 
@@ -252,3 +260,4 @@ export default async function CalidadPage({
     </div>
   );
 }
+
