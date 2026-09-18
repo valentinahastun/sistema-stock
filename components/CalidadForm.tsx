@@ -33,6 +33,8 @@ type Borrador = {
   pct_partidos: string;
   pct_arrugados: string;
   pct_otros_granos: string;
+  pct_roido_picado: string;
+  pct_humedad: string;
 };
 
 function borradorVacio(hoy: string): Borrador {
@@ -46,6 +48,8 @@ function borradorVacio(hoy: string): Borrador {
     pct_partidos: "",
     pct_arrugados: "",
     pct_otros_granos: "",
+    pct_roido_picado: "",
+    pct_humedad: "",
   };
 }
 
@@ -291,6 +295,32 @@ export default function CalidadForm({
               className="input"
               value={campos.pct_otros_granos}
               onChange={(e) => actualizar("pct_otros_granos", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Roído / picado (%)">
+            <input
+              name="pct_roido_picado"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_roido_picado}
+              onChange={(e) => actualizar("pct_roido_picado", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Humedad (%)">
+            <input
+              name="pct_humedad"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_humedad}
+              onChange={(e) => actualizar("pct_humedad", e.target.value)}
             />
           </Campo>
         </div>
