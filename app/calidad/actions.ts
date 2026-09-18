@@ -118,6 +118,37 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
   }
 }
 
+// Elimina un registro de calidad cargado. Solo el administrador (es la
+// única política de RLS que permite borrar en registros_calidad; calidad
+// solo puede insertar y editar lo propio, no borrar).
+export async function eliminarCalidad(registroId: string): Promise<Resultado> {
+  try {
+    const perfil = await getPerfilActual();
+    if (!perfil || perfil.rol !== "admin") {
+      throw new Error("Solo el usuario administrador puede eliminar un registro de calidad.");
+    }
+    if (!registroId) {
+      return { ok: false, error: "Falta el registro a eliminar." };
+    }
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("registros_calidad")
+      .delete()
+      .eq("id", registroId);
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    revalidatePath("/calidad");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 // Vincula un registro de calidad "suelto" (sin lote_id) a un lote que ya
 // se cargó en el sistema. Solo el administrador, porque tocar lote_id
 // es tocar stock.
