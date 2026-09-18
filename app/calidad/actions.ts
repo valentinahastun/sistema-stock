@@ -36,10 +36,15 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
     const fecha = formData.get("fecha") as string;
     const pct_bajo_zaranda = numOrNull(formData.get("pct_bajo_zaranda"));
     const pct_partidos = numOrNull(formData.get("pct_partidos"));
+    const pct_tegumento_danado = numOrNull(formData.get("pct_tegumento_danado"));
+    const pct_levemente_manchados = numOrNull(formData.get("pct_levemente_manchados"));
+    const pct_manchados = numOrNull(formData.get("pct_manchados"));
     const pct_arrugados = numOrNull(formData.get("pct_arrugados"));
-    const pct_otros_granos = numOrNull(formData.get("pct_otros_granos"));
-    const pct_roido_picado = numOrNull(formData.get("pct_roido_picado"));
+    const pct_otros_defectos_graves = numOrNull(formData.get("pct_otros_defectos_graves"));
+    const pct_otros_defectos_leves = numOrNull(formData.get("pct_otros_defectos_leves"));
+    const pct_materia_extrana = numOrNull(formData.get("pct_materia_extrana"));
     const pct_humedad = numOrNull(formData.get("pct_humedad"));
+    const observaciones = strOrNull(formData.get("observaciones"));
 
     if (!fecha) {
       return { ok: false, error: "Falta la fecha." };
@@ -99,10 +104,15 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       fecha,
       pct_bajo_zaranda,
       pct_partidos,
+      pct_tegumento_danado,
+      pct_levemente_manchados,
+      pct_manchados,
       pct_arrugados,
-      pct_otros_granos,
-      pct_roido_picado,
+      pct_otros_defectos_graves,
+      pct_otros_defectos_leves,
+      pct_materia_extrana,
       pct_humedad,
+      observaciones,
       fotos: urls,
       created_by: perfil.id,
     };
