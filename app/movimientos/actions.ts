@@ -107,3 +107,95 @@ export async function crearMovimiento(formData: FormData): Promise<Resultado> {
     return { ok: false, error: (e as Error).message };
   }
 }
+
+// Borra un movimiento cargado por error. Si es el ingreso original de un
+// lote (el que lo dio de alta), borra también el lote, pero solo si no
+// tiene nada más cargado encima (otros movimientos o calidad vinculada).
+export async function eliminarMovimiento(movimientoId: string): Promise<Resultado> {
+  try {
+    await verificarAdmin();
+    const supabase = createClient();
+
+    const { data: movimiento, error: errorMov } = await supabase
+      .from("movimientos_stock")
+      .select("id, lote_id, tipo, motivo")
+      .eq("id", movimientoId)
+      .single();
+
+    if (errorMov || !movimiento) {
+      return { ok: false, error: "No se encontró el movimiento." };
+    }
+
+    if (movimiento.tipo === "ingreso") {
+      const { count: otrosMovimientos } = await supabase
+        .from("movimientos_stock")
+        .select("id", { count: "exact", head: true })
+        .eq("lote_id", movimiento.lote_id)
+        .neq("id", movimiento.id);
+
+      if ((otrosMovimientos ?? 0) > 0) {
+        return {
+          ok: false,
+          error:
+            "Es el ingreso original del lote y ya tiene otros movimientos (descartes o egresos) cargados encima. Borrá esos primero.",
+        };
+      }
+
+      const { count: calidadVinculada } = await supabase
+        .from("registros_calidad")
+        .select("id", { count: "exact", head: true })
+        .eq("lote_id", movimiento.lote_id);
+
+      if ((calidadVinculada ?? 0) > 0) {
+        return {
+          ok: false,
+          error:
+            "Este lote tiene un registro de calidad vinculado. Desvinculalo antes de borrar el ingreso.",
+        };
+      }
+
+      const { error: errorDelMov } = await supabase
+        .from("movimientos_stock")
+        .delete()
+        .eq("id", movimiento.id);
+      if (errorDelMov) return { ok: false, error: errorDelMov.message };
+
+      const { error: errorDelLote } = await supabase
+        .from("lotes")
+        .delete()
+        .eq("id", movimiento.lote_id);
+      if (errorDelLote) return { ok: false, error: errorDelLote.message };
+    } else {
+      const { error: errorDel } = await supabase
+        .from("movimientos_stock")
+        .delete()
+        .eq("id", movimiento.id);
+      if (errorDel) return { ok: false, error: errorDel.message };
+
+      // Si era el descarte que había marcado el lote como "procesado" y no
+      // queda ningún otro descarte de procesamiento, el lote vuelve a "natural".
+      if (movimiento.tipo === "descarte" && movimiento.motivo === "procesamiento") {
+        const { count: quedanProcesamiento } = await supabase
+          .from("movimientos_stock")
+          .select("id", { count: "exact", head: true })
+          .eq("lote_id", movimiento.lote_id)
+          .eq("tipo", "descarte")
+          .eq("motivo", "procesamiento");
+
+        if ((quedanProcesamiento ?? 0) === 0) {
+          await supabase.from("lotes").update({ estado: "natural" }).eq("id", movimiento.lote_id);
+        }
+      }
+    }
+
+    revalidatePath("/");
+    revalidatePath("/movimientos");
+    revalidatePath("/stock");
+    revalidatePath("/ingresos");
+    revalidatePath("/egresos");
+    revalidatePath("/calidad");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
