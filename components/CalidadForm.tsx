@@ -21,7 +21,23 @@ export type LoteParaCalidad = {
 
 export type OpcionCatalogo = { id: string; nombre: string };
 
-const CLAVE_BORRADOR = "calidad-draft-v1";
+// v2: cambió el set de parámetros de calidad (ver migración
+// 0010_calidad_parametros.sql), así que se cambia la clave para no
+// levantar un borrador viejo con campos que ya no existen.
+const CLAVE_BORRADOR = "calidad-draft-v2";
+
+// Los 7 campos que suman "daños totales" (ver columna calculada en la
+// base). Se usa esta lista tanto para el cálculo en vivo como para
+// mandarlos en el mismo orden que la plantilla del certificado.
+const CAMPOS_DANOS = [
+  "pct_partidos",
+  "pct_tegumento_danado",
+  "pct_levemente_manchados",
+  "pct_manchados",
+  "pct_arrugados",
+  "pct_otros_defectos_graves",
+  "pct_otros_defectos_leves",
+] as const;
 
 type Borrador = {
   planta_id: string;
@@ -29,12 +45,17 @@ type Borrador = {
   productor_id: string;
   numero_contrato: string;
   fecha: string;
-  pct_bajo_zaranda: string;
   pct_partidos: string;
+  pct_tegumento_danado: string;
+  pct_levemente_manchados: string;
+  pct_manchados: string;
   pct_arrugados: string;
-  pct_otros_granos: string;
-  pct_roido_picado: string;
+  pct_otros_defectos_graves: string;
+  pct_otros_defectos_leves: string;
+  pct_materia_extrana: string;
   pct_humedad: string;
+  pct_bajo_zaranda: string;
+  observaciones: string;
 };
 
 function borradorVacio(hoy: string): Borrador {
@@ -44,12 +65,17 @@ function borradorVacio(hoy: string): Borrador {
     productor_id: "",
     numero_contrato: "",
     fecha: hoy,
-    pct_bajo_zaranda: "",
     pct_partidos: "",
+    pct_tegumento_danado: "",
+    pct_levemente_manchados: "",
+    pct_manchados: "",
     pct_arrugados: "",
-    pct_otros_granos: "",
-    pct_roido_picado: "",
+    pct_otros_defectos_graves: "",
+    pct_otros_defectos_leves: "",
+    pct_materia_extrana: "",
     pct_humedad: "",
+    pct_bajo_zaranda: "",
+    observaciones: "",
   };
 }
 
@@ -79,8 +105,8 @@ export default function CalidadForm({
     try {
       const guardado = localStorage.getItem(CLAVE_BORRADOR);
       if (guardado) {
-        const datos = JSON.parse(guardado) as Borrador;
-        setCampos(datos);
+        const datos = JSON.parse(guardado) as Partial<Borrador>;
+        setCampos({ ...borradorVacio(hoy), ...datos });
         setHuboBorrador(true);
       }
     } catch {
@@ -109,6 +135,13 @@ export default function CalidadForm({
   function actualizar<K extends keyof Borrador>(campo: K, valor: Borrador[K]) {
     setCampos((prev) => ({ ...prev, [campo]: valor }));
   }
+
+  // Se recalcula en vivo a medida que se escribe, para que se vea igual
+  // a como después va a quedar guardado (lo calcula la base de datos).
+  const danosTotales = CAMPOS_DANOS.reduce((acc, campo) => {
+    const n = Number(campos[campo]);
+    return acc + (Number.isNaN(n) ? 0 : n);
+  }, 0);
 
   async function intentarEnviar(formData: FormData) {
     setEnviando(true);
@@ -245,20 +278,7 @@ export default function CalidadForm({
         </Campo>
 
         <div className="grid grid-cols-2 gap-4">
-          <Campo label="Bajo zaranda (%)">
-            <input
-              name="pct_bajo_zaranda"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              max="100"
-              className="input"
-              value={campos.pct_bajo_zaranda}
-              onChange={(e) => actualizar("pct_bajo_zaranda", e.target.value)}
-            />
-          </Campo>
-          <Campo label="Partidos (%)">
+          <Campo label="Partidos y quebrados / Split and broken (%)">
             <input
               name="pct_partidos"
               type="number"
@@ -271,7 +291,46 @@ export default function CalidadForm({
               onChange={(e) => actualizar("pct_partidos", e.target.value)}
             />
           </Campo>
-          <Campo label="Arrugados (%)">
+          <Campo label="Granos con tegumento dañado / Skin damage (%)">
+            <input
+              name="pct_tegumento_danado"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_tegumento_danado}
+              onChange={(e) => actualizar("pct_tegumento_danado", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Granos levemente manchados / Slightly stained grains (%)">
+            <input
+              name="pct_levemente_manchados"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_levemente_manchados}
+              onChange={(e) => actualizar("pct_levemente_manchados", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Granos Manchados / Stained grains (%)">
+            <input
+              name="pct_manchados"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_manchados}
+              onChange={(e) => actualizar("pct_manchados", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Granos arrugados / Wrinkled grains (%)">
             <input
               name="pct_arrugados"
               type="number"
@@ -284,33 +343,54 @@ export default function CalidadForm({
               onChange={(e) => actualizar("pct_arrugados", e.target.value)}
             />
           </Campo>
-          <Campo label="Otros granos (%)">
+          <Campo label="Otros defectos graves / Other severe defects (%)">
             <input
-              name="pct_otros_granos"
+              name="pct_otros_defectos_graves"
               type="number"
               inputMode="decimal"
               step="0.01"
               min="0"
               max="100"
               className="input"
-              value={campos.pct_otros_granos}
-              onChange={(e) => actualizar("pct_otros_granos", e.target.value)}
+              value={campos.pct_otros_defectos_graves}
+              onChange={(e) => actualizar("pct_otros_defectos_graves", e.target.value)}
             />
           </Campo>
-          <Campo label="Roído / picado (%)">
+          <Campo label="Otros defectos leves / Other minor defects (%)">
             <input
-              name="pct_roido_picado"
+              name="pct_otros_defectos_leves"
               type="number"
               inputMode="decimal"
               step="0.01"
               min="0"
               max="100"
               className="input"
-              value={campos.pct_roido_picado}
-              onChange={(e) => actualizar("pct_roido_picado", e.target.value)}
+              value={campos.pct_otros_defectos_leves}
+              onChange={(e) => actualizar("pct_otros_defectos_leves", e.target.value)}
             />
           </Campo>
-          <Campo label="Humedad (%)">
+          <Campo label="DAÑOS TOTALES / TOTAL DAMAGES (%)">
+            <input
+              type="number"
+              disabled
+              className="input bg-gray-100 text-gray-600 font-medium"
+              value={danosTotales.toFixed(2)}
+            />
+          </Campo>
+          <Campo label="Materia extraña / Foreign matter (%)">
+            <input
+              name="pct_materia_extrana"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_materia_extrana}
+              onChange={(e) => actualizar("pct_materia_extrana", e.target.value)}
+            />
+          </Campo>
+          <Campo label="Humedad / Moisture (%)">
             <input
               name="pct_humedad"
               type="number"
@@ -323,7 +403,35 @@ export default function CalidadForm({
               onChange={(e) => actualizar("pct_humedad", e.target.value)}
             />
           </Campo>
+          <Campo label="Bajo zaranda / Undersize (%)">
+            <input
+              name="pct_bajo_zaranda"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="100"
+              className="input"
+              value={campos.pct_bajo_zaranda}
+              onChange={(e) => actualizar("pct_bajo_zaranda", e.target.value)}
+            />
+          </Campo>
         </div>
+        <p className="text-xs text-gray-400 -mt-2">
+          "Daños totales" se calcula solo, sumando los 7 campos de arriba
+          (no incluye materia extraña, humedad ni bajo zaranda).
+        </p>
+
+        <Campo label="Observaciones">
+          <textarea
+            name="observaciones"
+            rows={3}
+            className="input"
+            placeholder="Cualquier aclaración sobre este análisis…"
+            value={campos.observaciones}
+            onChange={(e) => actualizar("observaciones", e.target.value)}
+          />
+        </Campo>
 
         <Campo label="Fotos">
           <input
