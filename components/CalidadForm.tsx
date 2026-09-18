@@ -194,7 +194,7 @@ export default function CalidadForm({
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="font-medium text-brand-navy mb-1">Cargar calidad</h2>
       <p className="text-xs text-gray-500 mb-4">
-        Sacá la foto ahí mismo con el celular. No hace falta elegir el lote:
+        Sacá la foto o el video ahí mismo con el celular. No hace falta elegir el lote:
         con planta, producto, productor y contrato (si lo tenés) alcanza. Se
         vincula al lote más adelante desde el panel de administración.
       </p>
@@ -433,11 +433,11 @@ export default function CalidadForm({
           />
         </Campo>
 
-        <Campo label="Fotos">
+        <Campo label="Fotos / Videos">
           <input
             name="fotos"
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             capture="environment"
             multiple
             className="input"
