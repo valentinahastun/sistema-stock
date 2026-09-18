@@ -28,7 +28,7 @@ export default async function CalidadPage({
       supabase
         .from("registros_calidad")
         .select(
-          "id, fecha, pct_bajo_zaranda, pct_partidos, pct_arrugados, pct_otros_granos, pct_roido_picado, pct_humedad, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
+          "id, fecha, pct_partidos, pct_tegumento_danado, pct_levemente_manchados, pct_manchados, pct_arrugados, pct_otros_defectos_graves, pct_otros_defectos_leves, pct_danos_totales, pct_materia_extrana, pct_humedad, pct_bajo_zaranda, observaciones, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
         )
         .order("fecha", { ascending: false })
         .limit(300),
@@ -37,12 +37,18 @@ export default async function CalidadPage({
   type FilaRegistro = {
     id: string;
     fecha: string;
-    pct_bajo_zaranda: number | null;
     pct_partidos: number | null;
+    pct_tegumento_danado: number | null;
+    pct_levemente_manchados: number | null;
+    pct_manchados: number | null;
     pct_arrugados: number | null;
-    pct_otros_granos: number | null;
-    pct_roido_picado: number | null;
+    pct_otros_defectos_graves: number | null;
+    pct_otros_defectos_leves: number | null;
+    pct_danos_totales: number | null;
+    pct_materia_extrana: number | null;
     pct_humedad: number | null;
+    pct_bajo_zaranda: number | null;
+    observaciones: string | null;
     fotos: string[] | null;
     lote_id: string | null;
     numero_contrato: string | null;
@@ -143,12 +149,18 @@ export default async function CalidadPage({
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2">CP / contrato</th>
-              <th className="px-4 py-2 text-right">Bajo zaranda</th>
-              <th className="px-4 py-2 text-right">Partidos</th>
+              <th className="px-4 py-2 text-right">Partidos y quebrados</th>
+              <th className="px-4 py-2 text-right">Tegumento dañado</th>
+              <th className="px-4 py-2 text-right">Levemente manchados</th>
+              <th className="px-4 py-2 text-right">Manchados</th>
               <th className="px-4 py-2 text-right">Arrugados</th>
-              <th className="px-4 py-2 text-right">Otros granos</th>
-              <th className="px-4 py-2 text-right">Roído / picado</th>
+              <th className="px-4 py-2 text-right">Otros defectos graves</th>
+              <th className="px-4 py-2 text-right">Otros defectos leves</th>
+              <th className="px-4 py-2 text-right font-semibold">Daños totales</th>
+              <th className="px-4 py-2 text-right">Materia extraña</th>
               <th className="px-4 py-2 text-right">Humedad</th>
+              <th className="px-4 py-2 text-right">Bajo zaranda</th>
+              <th className="px-4 py-2">Observaciones</th>
               <th className="px-4 py-2">Fotos</th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
@@ -169,12 +181,20 @@ export default async function CalidadPage({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right">{pct(f.pct_bajo_zaranda)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_partidos)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_tegumento_danado)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_levemente_manchados)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_manchados)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_arrugados)}</td>
-                  <td className="px-4 py-2 text-right">{pct(f.pct_otros_granos)}</td>
-                  <td className="px-4 py-2 text-right">{pct(f.pct_roido_picado)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_otros_defectos_graves)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_otros_defectos_leves)}</td>
+                  <td className="px-4 py-2 text-right font-semibold">{pct(f.pct_danos_totales)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_materia_extrana)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_humedad)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_bajo_zaranda)}</td>
+                  <td className="px-4 py-2 max-w-[200px] whitespace-pre-wrap text-gray-600">
+                    {f.observaciones ?? "—"}
+                  </td>
                   <td className="px-4 py-2">
                     {f.fotos && f.fotos.length > 0 ? (
                       <div className="flex gap-1">
@@ -207,7 +227,7 @@ export default async function CalidadPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 13 : 12} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 19 : 18} className="px-4 py-6 text-center text-gray-400">
                   No hay registros de calidad todavía para este filtro.
                 </td>
               </tr>
@@ -218,3 +238,4 @@ export default async function CalidadPage({
     </div>
   );
 }
+
