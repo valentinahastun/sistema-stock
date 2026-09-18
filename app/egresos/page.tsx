@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
+import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -14,6 +16,8 @@ export default async function EgresosPage({
   searchParams: { planta_id?: string; producto_id?: string };
 }) {
   const supabase = createClient();
+  const perfil = await getPerfilActual();
+  const esAdmin = perfil?.rol === "admin";
 
   const [{ data: plantas }, { data: productos }, { data: movimientos }] = await Promise.all([
     supabase.from("plantas").select("id, nombre").order("nombre"),
@@ -83,6 +87,7 @@ export default async function EgresosPage({
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Destino / motivo</th>
               <th className="px-4 py-2">Observaciones</th>
+              {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -97,11 +102,16 @@ export default async function EgresosPage({
                 </td>
                 <td className="px-4 py-2">{f.motivo ?? "—"}</td>
                 <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
+                {esAdmin && (
+                  <td className="px-4 py-2">
+                    <BotonEliminarMovimiento movimientoId={f.id} />
+                  </td>
+                )}
               </tr>
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
                   No hay egresos cargados todavía para este filtro.
                 </td>
               </tr>
