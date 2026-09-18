@@ -37,7 +37,7 @@ export default async function MovimientosPage() {
       supabase
         .from("movimientos_stock")
         .select(
-          "id, cantidad, fecha, motivo, observaciones, lotes(numero_cp, plantas(nombre), productos(nombre))"
+          "id, cantidad, fecha, motivo, observaciones, lotes!lote_id(numero_cp, plantas(nombre), productos(nombre))"
         )
         .eq("tipo", "descarte")
         .order("fecha", { ascending: false })
@@ -109,3 +109,5 @@ export default async function MovimientosPage() {
     </div>
   );
 }
+
+
