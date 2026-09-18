@@ -57,14 +57,15 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       };
     }
 
-    // Fotos nuevas seleccionadas en este envío.
+    // Fotos y/o videos nuevos seleccionados en este envío (el input
+    // acepta ambos tipos; la subida es genérica, no distingue).
     const archivos = formData
       .getAll("fotos")
       .filter((f): f is File => f instanceof File && f.size > 0);
 
     // Si ya había un registro de calidad para este lote, conservamos sus
-    // fotos (solo aplica cuando se está vinculando a un lote existente;
-    // un registro suelto siempre es nuevo).
+    // fotos/videos (solo aplica cuando se está vinculando a un lote
+    // existente; un registro suelto siempre es nuevo).
     let urls: string[] = [];
     if (lote_id) {
       const { data: existente } = await supabase
@@ -85,7 +86,7 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       if (errorSubida) {
         return {
           ok: false,
-          error: `No se pudo subir una foto: ${errorSubida.message}`,
+          error: `No se pudo subir un archivo: ${errorSubida.message}`,
         };
       }
 
