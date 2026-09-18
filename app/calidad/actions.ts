@@ -37,6 +37,8 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
     const pct_partidos = numOrNull(formData.get("pct_partidos"));
     const pct_arrugados = numOrNull(formData.get("pct_arrugados"));
     const pct_otros_granos = numOrNull(formData.get("pct_otros_granos"));
+    const pct_roido_picado = numOrNull(formData.get("pct_roido_picado"));
+    const pct_humedad = numOrNull(formData.get("pct_humedad"));
 
     if (!fecha) {
       return { ok: false, error: "Falta la fecha." };
@@ -98,6 +100,8 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       pct_partidos,
       pct_arrugados,
       pct_otros_granos,
+      pct_roido_picado,
+      pct_humedad,
       fotos: urls,
       created_by: perfil.id,
     };
