@@ -2,15 +2,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
-import VincularCalidad from "@/components/VincularCalidad";
 import BotonEliminarCalidad from "@/components/BotonEliminarCalidad";
-
+ 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
   if (!rel) return "";
   return Array.isArray(rel) ? rel[0]?.nombre ?? "" : rel.nombre;
 }
-
+ 
 export default async function CalidadPage({
   searchParams,
 }: {
@@ -20,23 +19,12 @@ export default async function CalidadPage({
   const supabase = createClient();
   const esAdmin = perfil?.rol === "admin";
   const puedeCargar = perfil?.rol === "admin" || perfil?.rol === "calidad";
-
-  const [{ data: plantas }, { data: productos }, { data: productores }, { data: lotes }, { data: registros }] =
+ 
+  const [{ data: plantas }, { data: productos }, { data: productores }, { data: registros }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
       supabase.from("productores").select("id, nombre").order("nombre"),
-      // Solo admin puede ver lotes (es dato de stock); para calidad esta
-      // consulta ni se necesita, así que se evita directamente.
-      esAdmin
-        ? supabase
-            .from("lotes")
-            .select(
-              "id, numero_cp, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre)"
-            )
-            .order("fecha_ingreso", { ascending: false })
-            .limit(300)
-        : Promise.resolve({ data: [] as any[] }),
       supabase
         .from("registros_calidad")
         .select(
@@ -45,14 +33,7 @@ export default async function CalidadPage({
         .order("fecha", { ascending: false })
         .limit(300),
     ]);
-
-  const lotesParaVincular = (lotes ?? []).map((l: any) => ({
-    id: l.id,
-    etiqueta: `${nombreDe(l.plantas)} · ${nombreDe(l.productos)} · ${nombreDe(l.productores)}${
-      l.numero_cp ? ` · CP ${l.numero_cp}` : ""
-    }`,
-  }));
-
+ 
   type FilaRegistro = {
     id: string;
     fecha: string;
@@ -79,9 +60,9 @@ export default async function CalidadPage({
     productos: Rel;
     productores: Rel;
   };
-
+ 
   const todasLasFilas = (registros ?? []) as unknown as FilaRegistro[];
-
+ 
   // Para cada fila, la planta/producto/productor salen del lote si ya
   // está vinculada, o de las columnas propias si todavía es un registro
   // suelto (analizado antes de que se cargara el ingreso al sistema).
@@ -109,7 +90,7 @@ export default async function CalidadPage({
       vinculado: false,
     };
   }
-
+ 
   let filas = todasLasFilas;
   if (searchParams.planta_id) {
     filas = filas.filter((f) => datosFila(f).planta_id === searchParams.planta_id);
@@ -120,17 +101,15 @@ export default async function CalidadPage({
   if (searchParams.productor_id) {
     filas = filas.filter((f) => datosFila(f).productor_id === searchParams.productor_id);
   }
-
-  const sueltos = esAdmin ? todasLasFilas.filter((f) => !f.lote_id) : [];
-
+ 
   const pct = (n: number | null) => (n === null ? "—" : `${Number(n).toFixed(2)}%`);
-
+ 
   return (
     <div>
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-navy">
         ← Volver al panel
       </Link>
-
+ 
       <div className="flex items-center justify-between mt-2 mb-4">
         <h1 className="text-xl font-semibold text-brand-navy">Calidad</h1>
         {puedeCargar && (
@@ -142,34 +121,7 @@ export default async function CalidadPage({
           </Link>
         )}
       </div>
-
-      {esAdmin && sueltos.length > 0 && (
-        <div className="mb-6 max-w-2xl bg-white rounded-lg shadow p-6">
-          <h2 className="font-medium text-brand-navy mb-1">
-            Registros de calidad sin vincular ({sueltos.length})
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Se cargaron antes de que el lote existiera en el sistema. Cuando
-            cargues el ingreso, vinculalos acá.
-          </p>
-          <div className="space-y-3">
-            {sueltos.map((f) => {
-              const d = datosFila(f);
-              return (
-                <VincularCalidad
-                  key={f.id}
-                  registroId={f.id}
-                  etiqueta={`${d.planta} · ${d.producto}${
-                    f.numero_contrato ? ` · contrato ${f.numero_contrato}` : ""
-                  } · ${f.fecha}`}
-                  lotes={lotesParaVincular}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
+ 
       <FiltroStock
         plantas={plantas ?? []}
         productos={productos ?? []}
@@ -179,7 +131,7 @@ export default async function CalidadPage({
         productorSeleccionado={searchParams.productor_id ?? ""}
         basePath="/calidad"
       />
-
+ 
       <div className="bg-white rounded-lg shadow mt-4 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -260,4 +212,3 @@ export default async function CalidadPage({
     </div>
   );
 }
-
