@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
+import { registrarEliminacion } from "@/lib/eliminaciones";
 import { revalidatePath } from "next/cache";
 
 type Resultado = { ok: true } | { ok: false; error: string };
@@ -11,6 +12,7 @@ async function verificarAdmin() {
   if (!perfil || perfil.rol !== "admin") {
     throw new Error("Solo el usuario administrador puede cargar movimientos.");
   }
+  return perfil;
 }
 
 // Alta de un lote nuevo + su movimiento de ingreso.
@@ -175,12 +177,12 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
 // tiene nada más cargado encima (otros movimientos o calidad vinculada).
 export async function eliminarMovimiento(movimientoId: string): Promise<Resultado> {
   try {
-    await verificarAdmin();
+    const perfil = await verificarAdmin();
     const supabase = createClient();
 
     const { data: movimiento, error: errorMov } = await supabase
       .from("movimientos_stock")
-      .select("id, lote_id, tipo, motivo")
+      .select("*")
       .eq("id", movimientoId)
       .single();
 
@@ -216,6 +218,32 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         };
       }
 
+      const { data: loteRow } = await supabase
+        .from("lotes")
+        .select("*")
+        .eq("id", movimiento.lote_id)
+        .single();
+
+      const logMov = await registrarEliminacion(
+        supabase,
+        perfil,
+        "movimientos_stock",
+        movimiento.id,
+        movimiento
+      );
+      if (!logMov.ok) return logMov;
+
+      if (loteRow) {
+        const logLote = await registrarEliminacion(
+          supabase,
+          perfil,
+          "lotes",
+          loteRow.id,
+          loteRow
+        );
+        if (!logLote.ok) return logLote;
+      }
+
       const { error: errorDelMov } = await supabase
         .from("movimientos_stock")
         .delete()
@@ -228,6 +256,15 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         .eq("id", movimiento.lote_id);
       if (errorDelLote) return { ok: false, error: errorDelLote.message };
     } else {
+      const logMov = await registrarEliminacion(
+        supabase,
+        perfil,
+        "movimientos_stock",
+        movimiento.id,
+        movimiento
+      );
+      if (!logMov.ok) return logMov;
+
       const { error: errorDel } = await supabase
         .from("movimientos_stock")
         .delete()
