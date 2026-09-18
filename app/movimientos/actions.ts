@@ -70,7 +70,8 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
   }
 }
 
-// Movimiento de descarte o egreso sobre un lote existente.
+// Descarte sobre un lote existente (sigue siendo siempre puntual: es el
+// que puede pasar el lote a "procesado").
 export async function crearMovimiento(formData: FormData): Promise<Resultado> {
   try {
     await verificarAdmin();
@@ -102,6 +103,67 @@ export async function crearMovimiento(formData: FormData): Promise<Resultado> {
 
     revalidatePath("/");
     revalidatePath("/movimientos");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Egreso "general": no se elige un lote puntual, se elige planta +
+// producto (y opcionalmente productor, solo a modo de registro) y se
+// resta directo del stock general de esa planta/producto, sin tocar el
+// stock de ningún lote en particular.
+export async function crearEgreso(formData: FormData): Promise<Resultado> {
+  try {
+    await verificarAdmin();
+    const supabase = createClient();
+
+    const planta_id = formData.get("planta_id") as string;
+    const producto_id = formData.get("producto_id") as string;
+    const productor_id = (formData.get("productor_id") as string) || null;
+    const cantidad = Number(formData.get("cantidad"));
+    const fecha = formData.get("fecha") as string;
+    const observaciones = (formData.get("observaciones") as string) || null;
+
+    if (!planta_id || !producto_id || !cantidad) {
+      return { ok: false, error: "Faltan datos obligatorios." };
+    }
+
+    const { data: stockFila } = await supabase
+      .from("stock_consolidado")
+      .select("stock_disponible_tn")
+      .eq("planta_id", planta_id)
+      .eq("producto_id", producto_id)
+      .maybeSingle();
+
+    const disponible = Number(stockFila?.stock_disponible_tn ?? 0);
+    if (cantidad > disponible) {
+      return {
+        ok: false,
+        error: `No hay suficiente stock disponible en esa planta/producto (disponible: ${disponible.toFixed(
+          2
+        )} tn).`,
+      };
+    }
+
+    const { error } = await supabase.from("movimientos_stock").insert({
+      tipo: "egreso",
+      planta_id,
+      producto_id,
+      productor_id,
+      cantidad,
+      fecha,
+      observaciones,
+    });
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    revalidatePath("/");
+    revalidatePath("/movimientos");
+    revalidatePath("/egresos");
+    revalidatePath("/stock");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
