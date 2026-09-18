@@ -14,20 +14,174 @@ export type LoteDetalle = {
   caida_pct_estimada: number | null;
 };
 
-export default function FilaStock({
-  planta,
-  producto,
-  stockDisponibleTn,
-  comprometidoTn,
-  libreTn,
-  lotes,
-  puedeEditar,
-}: {
+export type FilaBase = {
+  planta_id: string;
   planta: string;
+  producto_id: string;
   producto: string;
   stockDisponibleTn: number;
   comprometidoTn: number;
   libreTn: number;
+};
+
+type Modo = "planta" | "producto";
+
+// Vista agrupada del stock: por defecto agrupa por planta (cada planta
+// es un grupo colapsado que muestra su subtotal, y al abrirlo aparecen
+// sus productos), pero se puede cambiar a agrupar por producto para
+// contestar la pregunta inversa ("cuánto tengo de este producto en
+// total, sumando todas las plantas"). Cada fila de producto, a su vez,
+// se puede abrir para ver el detalle por lote de siempre.
+export default function StockAgrupado({
+  filas,
+  lotesPorClave,
+  puedeEditar,
+}: {
+  filas: FilaBase[];
+  lotesPorClave: Map<string, LoteDetalle[]>;
+  puedeEditar: boolean;
+}) {
+  const [modo, setModo] = useState<Modo>("planta");
+
+  const grupos = new Map<string, { id: string; nombre: string; filas: FilaBase[] }>();
+  filas.forEach((f) => {
+    const id = modo === "planta" ? f.planta_id : f.producto_id;
+    const nombre = modo === "planta" ? f.planta : f.producto;
+    if (!grupos.has(id)) grupos.set(id, { id, nombre, filas: [] });
+    grupos.get(id)!.filas.push(f);
+  });
+
+  const listaGrupos = Array.from(grupos.values())
+    .map((g) => ({
+      ...g,
+      filas: [...g.filas].sort((a, b) =>
+        (modo === "planta" ? a.producto : a.planta).localeCompare(
+          modo === "planta" ? b.producto : b.planta
+        )
+      ),
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  return (
+    <div>
+      <div className="flex items-center justify-end gap-2 mb-2 text-sm">
+        <span className="text-gray-500">Agrupar por:</span>
+        <button
+          type="button"
+          onClick={() => setModo("planta")}
+          className={`px-2.5 py-1 rounded ${
+            modo === "planta" ? "bg-brand-navy text-white" : "bg-gray-100 text-gray-700"
+          }`}
+        >
+          Planta
+        </button>
+        <button
+          type="button"
+          onClick={() => setModo("producto")}
+          className={`px-2.5 py-1 rounded ${
+            modo === "producto" ? "bg-brand-navy text-white" : "bg-gray-100 text-gray-700"
+          }`}
+        >
+          Producto
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left border-b bg-brand-green-light">
+              <th className="px-4 py-2">{modo === "planta" ? "Planta" : "Producto"}</th>
+              <th className="px-4 py-2 text-right">Disponible (tn)</th>
+              <th className="px-4 py-2 text-right">Comprometido (tn)</th>
+              <th className="px-4 py-2 text-right">Libre (tn)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listaGrupos.map((g) => (
+              <GrupoFila
+                key={g.id}
+                grupo={g}
+                modo={modo}
+                lotesPorClave={lotesPorClave}
+                puedeEditar={puedeEditar}
+              />
+            ))}
+            {listaGrupos.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                  No hay stock cargado todavía para este filtro.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function GrupoFila({
+  grupo,
+  modo,
+  lotesPorClave,
+  puedeEditar,
+}: {
+  grupo: { id: string; nombre: string; filas: FilaBase[] };
+  modo: Modo;
+  lotesPorClave: Map<string, LoteDetalle[]>;
+  puedeEditar: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+
+  const disponible = grupo.filas.reduce((acc, f) => acc + f.stockDisponibleTn, 0);
+  const comprometido = grupo.filas.reduce((acc, f) => acc + f.comprometidoTn, 0);
+  const libre = grupo.filas.reduce((acc, f) => acc + f.libreTn, 0);
+
+  return (
+    <>
+      <tr className="border-b last:border-0 bg-gray-50">
+        <td className="px-4 py-2">
+          <button
+            type="button"
+            onClick={() => setAbierto((v) => !v)}
+            className="flex items-center gap-1.5 font-medium text-brand-navy hover:underline"
+          >
+            <span className="inline-block w-3 text-xs text-gray-400">
+              {abierto ? "▾" : "▸"}
+            </span>
+            {grupo.nombre}
+            <span className="text-xs text-gray-400 font-normal">
+              ({grupo.filas.length} {modo === "planta" ? "producto" : "planta"}
+              {grupo.filas.length === 1 ? "" : "s"})
+            </span>
+          </button>
+        </td>
+        <td className="px-4 py-2 text-right font-medium">{disponible.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right font-medium">{comprometido.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right font-medium">{libre.toFixed(2)}</td>
+      </tr>
+      {abierto &&
+        grupo.filas.map((f) => (
+          <FilaProducto
+            key={`${f.planta_id}-${f.producto_id}`}
+            etiqueta={modo === "planta" ? f.producto : f.planta}
+            fila={f}
+            lotes={lotesPorClave.get(`${f.planta_id}-${f.producto_id}`) ?? []}
+            puedeEditar={puedeEditar}
+          />
+        ))}
+    </>
+  );
+}
+
+function FilaProducto({
+  etiqueta,
+  fila,
+  lotes,
+  puedeEditar,
+}: {
+  etiqueta: string;
+  fila: FilaBase;
   lotes: LoteDetalle[];
   puedeEditar: boolean;
 }) {
@@ -36,7 +190,7 @@ export default function FilaStock({
   return (
     <>
       <tr className="border-b last:border-0">
-        <td className="px-4 py-2">
+        <td className="px-4 py-2 pl-8">
           <button
             type="button"
             onClick={() => setAbierto((v) => !v)}
@@ -45,17 +199,16 @@ export default function FilaStock({
             <span className="inline-block w-3 text-xs text-gray-400">
               {abierto ? "▾" : "▸"}
             </span>
-            {planta}
+            {etiqueta}
           </button>
         </td>
-        <td className="px-4 py-2">{producto}</td>
-        <td className="px-4 py-2 text-right">{stockDisponibleTn.toFixed(2)}</td>
-        <td className="px-4 py-2 text-right">{comprometidoTn.toFixed(2)}</td>
-        <td className="px-4 py-2 text-right font-medium">{libreTn.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right">{fila.stockDisponibleTn.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right">{fila.comprometidoTn.toFixed(2)}</td>
+        <td className="px-4 py-2 text-right font-medium">{fila.libreTn.toFixed(2)}</td>
       </tr>
       {abierto && (
         <tr className="border-b last:border-0 bg-gray-50">
-          <td colSpan={5} className="px-4 py-3">
+          <td colSpan={4} className="px-4 py-3">
             <DetalleLotes lotes={lotes} puedeEditar={puedeEditar} />
           </td>
         </tr>
