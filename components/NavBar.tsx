@@ -41,9 +41,17 @@ export default async function NavBar() {
               </>
             )}
             {perfil.rol === "admin" && (
-              <Link href="/movimientos" className="hover:text-brand-green">
-                Cargar movimiento
-              </Link>
+              <>
+                <Link href="/movimientos" className="hover:text-brand-green">
+                  Cargar movimiento
+                </Link>
+                <Link href="/catalogos" className="hover:text-brand-green">
+                  Catálogos
+                </Link>
+                <Link href="/auditoria" className="hover:text-brand-green">
+                  Auditoría
+                </Link>
+              </>
             )}
           </nav>
         </div>
