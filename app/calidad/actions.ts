@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
+import { registrarEliminacion } from "@/lib/eliminaciones";
 import { revalidatePath } from "next/cache";
 
 type Resultado = { ok: true } | { ok: false; error: string };
@@ -136,6 +137,26 @@ export async function eliminarCalidad(registroId: string): Promise<Resultado> {
     }
 
     const supabase = createClient();
+
+    const { data: registro, error: errorRegistro } = await supabase
+      .from("registros_calidad")
+      .select("*")
+      .eq("id", registroId)
+      .single();
+
+    if (errorRegistro || !registro) {
+      return { ok: false, error: "No se encontró el registro de calidad." };
+    }
+
+    const log = await registrarEliminacion(
+      supabase,
+      perfil,
+      "registros_calidad",
+      registro.id,
+      registro
+    );
+    if (!log.ok) return log;
+
     const { error } = await supabase
       .from("registros_calidad")
       .delete()
