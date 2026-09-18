@@ -25,7 +25,7 @@ export default async function IngresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, observaciones, lotes(numero_cp, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
+        "id, cantidad, fecha, observaciones, lotes!lote_id(numero_cp, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
       .order("fecha", { ascending: false })
