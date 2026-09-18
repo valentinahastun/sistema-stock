@@ -10,6 +10,13 @@ function nombreDe(rel: Rel): string {
   return Array.isArray(rel) ? rel[0]?.nombre ?? "" : rel.nombre;
 }
 
+// El campo "fotos" puede tener videos mezclados (el input de carga
+// acepta ambos). Se distingue por la extensión del archivo para no
+// mostrar un ícono de imagen rota cuando en realidad es un video.
+function esVideo(url: string): boolean {
+  return /\.(mp4|mov|webm|avi|mkv|m4v)(\?|$)/i.test(url);
+}
+
 export default async function CalidadPage({
   searchParams,
 }: {
@@ -161,7 +168,7 @@ export default async function CalidadPage({
               <th className="px-4 py-2 text-right">Humedad</th>
               <th className="px-4 py-2 text-right">Bajo zaranda</th>
               <th className="px-4 py-2">Observaciones</th>
-              <th className="px-4 py-2">Fotos</th>
+              <th className="px-4 py-2">Fotos / Videos</th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
@@ -198,15 +205,28 @@ export default async function CalidadPage({
                   <td className="px-4 py-2">
                     {f.fotos && f.fotos.length > 0 ? (
                       <div className="flex gap-1">
-                        {f.fotos.slice(0, 3).map((url) => (
-                          <a key={url} href={url} target="_blank" rel="noreferrer">
-                            <img
-                              src={url}
-                              alt="foto de calidad"
-                              className="w-8 h-8 object-cover rounded border"
-                            />
-                          </a>
-                        ))}
+                        {f.fotos.slice(0, 3).map((url) =>
+                          esVideo(url) ? (
+                            <a
+                              key={url}
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Ver video"
+                              className="w-8 h-8 flex items-center justify-center rounded border bg-gray-100 text-sm"
+                            >
+                              🎥
+                            </a>
+                          ) : (
+                            <a key={url} href={url} target="_blank" rel="noreferrer">
+                              <img
+                                src={url}
+                                alt="foto de calidad"
+                                className="w-8 h-8 object-cover rounded border"
+                              />
+                            </a>
+                          )
+                        )}
                         {f.fotos.length > 3 && (
                           <span className="text-xs text-gray-400">
                             +{f.fotos.length - 3}
@@ -238,4 +258,3 @@ export default async function CalidadPage({
     </div>
   );
 }
-
