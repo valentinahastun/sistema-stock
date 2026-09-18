@@ -85,7 +85,6 @@ export default async function IngresosPage({
               <th className="px-4 py-2">Planta</th>
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
-              <th className="px-4 py-2">CP</th>
               <th className="px-4 py-2">Estado</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Observaciones</th>
@@ -99,7 +98,6 @@ export default async function IngresosPage({
                 <td className="px-4 py-2">{nombreDe(f.lotes?.plantas ?? null)}</td>
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productos ?? null)}</td>
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productores ?? null)}</td>
-                <td className="px-4 py-2">{f.lotes?.numero_cp ?? "—"}</td>
                 <td className="px-4 py-2 capitalize">{f.lotes?.estado}</td>
                 <td className="px-4 py-2 text-right font-medium">
                   {Number(f.cantidad).toFixed(2)}
@@ -114,7 +112,7 @@ export default async function IngresosPage({
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 9 : 8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
                   No hay ingresos cargados todavía para este filtro.
                 </td>
               </tr>
