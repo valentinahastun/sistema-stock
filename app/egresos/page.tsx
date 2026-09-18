@@ -25,7 +25,7 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, lotes(numero_cp, planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, cantidad, fecha, motivo, observaciones, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
       .order("fecha", { ascending: false })
@@ -38,8 +38,13 @@ export default async function EgresosPage({
     fecha: string;
     motivo: string | null;
     observaciones: string | null;
+    planta_id: string | null;
+    producto_id: string | null;
+    productor_id: string | null;
+    plantas: Rel;
+    productos: Rel;
+    productores: Rel;
     lotes: {
-      numero_cp: string | null;
       planta_id: string;
       producto_id: string;
       plantas: Rel;
@@ -47,13 +52,35 @@ export default async function EgresosPage({
     } | null;
   };
 
-  let filas = ((movimientos ?? []) as unknown as Fila[]).filter((f) => f.lotes);
+  // Egresos "generales" (nuevos, sin lote): planta/producto quedan en las
+  // columnas propias del movimiento. Egresos viejos (de un lote puntual):
+  // planta/producto salen del lote.
+  function datosFila(f: Fila) {
+    if (f.lotes) {
+      return {
+        planta: nombreDe(f.lotes.plantas),
+        producto: nombreDe(f.lotes.productos),
+        productor: "—",
+        planta_id: f.lotes.planta_id,
+        producto_id: f.lotes.producto_id,
+      };
+    }
+    return {
+      planta: nombreDe(f.plantas) || "—",
+      producto: nombreDe(f.productos) || "—",
+      productor: nombreDe(f.productores) || "—",
+      planta_id: f.planta_id,
+      producto_id: f.producto_id,
+    };
+  }
+
+  let filas = (movimientos ?? []) as unknown as Fila[];
 
   if (searchParams.planta_id) {
-    filas = filas.filter((f) => f.lotes?.planta_id === searchParams.planta_id);
+    filas = filas.filter((f) => datosFila(f).planta_id === searchParams.planta_id);
   }
   if (searchParams.producto_id) {
-    filas = filas.filter((f) => f.lotes?.producto_id === searchParams.producto_id);
+    filas = filas.filter((f) => datosFila(f).producto_id === searchParams.producto_id);
   }
 
   const totalTn = filas.reduce((acc, f) => acc + Number(f.cantidad), 0);
@@ -83,7 +110,7 @@ export default async function EgresosPage({
               <th className="px-4 py-2">Fecha</th>
               <th className="px-4 py-2">Planta (origen)</th>
               <th className="px-4 py-2">Producto</th>
-              <th className="px-4 py-2">CP</th>
+              <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Destino / motivo</th>
               <th className="px-4 py-2">Observaciones</th>
@@ -91,24 +118,27 @@ export default async function EgresosPage({
             </tr>
           </thead>
           <tbody>
-            {filas.map((f) => (
-              <tr key={f.id} className="border-b last:border-0">
-                <td className="px-4 py-2 whitespace-nowrap">{f.fecha}</td>
-                <td className="px-4 py-2">{nombreDe(f.lotes?.plantas ?? null)}</td>
-                <td className="px-4 py-2">{nombreDe(f.lotes?.productos ?? null)}</td>
-                <td className="px-4 py-2">{f.lotes?.numero_cp ?? "—"}</td>
-                <td className="px-4 py-2 text-right font-medium">
-                  {Number(f.cantidad).toFixed(2)}
-                </td>
-                <td className="px-4 py-2">{f.motivo ?? "—"}</td>
-                <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
-                {esAdmin && (
-                  <td className="px-4 py-2">
-                    <BotonEliminarMovimiento movimientoId={f.id} />
+            {filas.map((f) => {
+              const d = datosFila(f);
+              return (
+                <tr key={f.id} className="border-b last:border-0">
+                  <td className="px-4 py-2 whitespace-nowrap">{f.fecha}</td>
+                  <td className="px-4 py-2">{d.planta}</td>
+                  <td className="px-4 py-2">{d.producto}</td>
+                  <td className="px-4 py-2">{d.productor}</td>
+                  <td className="px-4 py-2 text-right font-medium">
+                    {Number(f.cantidad).toFixed(2)}
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-4 py-2">{f.motivo ?? "—"}</td>
+                  <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
+                  {esAdmin && (
+                    <td className="px-4 py-2">
+                      <BotonEliminarMovimiento movimientoId={f.id} />
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {filas.length === 0 && (
               <tr>
                 <td colSpan={esAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
