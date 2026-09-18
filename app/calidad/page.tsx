@@ -2,8 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
-import CalidadForm from "@/components/CalidadForm";
 import VincularCalidad from "@/components/VincularCalidad";
+import BotonEliminarCalidad from "@/components/BotonEliminarCalidad";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -125,17 +125,17 @@ export default async function CalidadPage({
         ← Volver al panel
       </Link>
 
-      <h1 className="text-xl font-semibold text-brand-navy mt-2 mb-4">Calidad</h1>
-
-      {puedeCargar && (
-        <div className="mb-6 max-w-2xl">
-          <CalidadForm
-            plantas={plantas ?? []}
-            productos={productos ?? []}
-            productores={productores ?? []}
-          />
-        </div>
-      )}
+      <div className="flex items-center justify-between mt-2 mb-4">
+        <h1 className="text-xl font-semibold text-brand-navy">Calidad</h1>
+        {puedeCargar && (
+          <Link
+            href="/calidad/cargar"
+            className="text-sm bg-brand-green hover:bg-brand-green-dark text-white rounded px-3 py-1.5"
+          >
+            Cargar calidad
+          </Link>
+        )}
+      </div>
 
       {esAdmin && sueltos.length > 0 && (
         <div className="mb-6 max-w-2xl bg-white rounded-lg shadow p-6">
@@ -186,6 +186,7 @@ export default async function CalidadPage({
               <th className="px-4 py-2 text-right">Arrugados</th>
               <th className="px-4 py-2 text-right">Otros granos</th>
               <th className="px-4 py-2">Fotos</th>
+              {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -230,12 +231,17 @@ export default async function CalidadPage({
                       "—"
                     )}
                   </td>
+                  {esAdmin && (
+                    <td className="px-4 py-2">
+                      <BotonEliminarCalidad registroId={f.id} />
+                    </td>
+                  )}
                 </tr>
               );
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 11 : 10} className="px-4 py-6 text-center text-gray-400">
                   No hay registros de calidad todavía para este filtro.
                 </td>
               </tr>
@@ -246,4 +252,3 @@ export default async function CalidadPage({
     </div>
   );
 }
-
