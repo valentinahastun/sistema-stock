@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { crearIngreso, crearMovimiento } from "@/app/movimientos/actions";
+import { crearIngreso, crearMovimiento, crearEgreso } from "@/app/movimientos/actions";
 
 type Catalogo = { id: string; nombre: string };
 type Lote = {
@@ -50,6 +50,8 @@ export default function MovimientoForm({
     const resultado =
       tipo === "ingreso"
         ? await crearIngreso(formData)
+        : tipo === "egreso"
+        ? await crearEgreso(formData)
         : await crearMovimiento(formData);
 
     setEnviando(false);
@@ -151,6 +153,62 @@ export default function MovimientoForm({
               />
             </Campo>
           </>
+        ) : tipo === "egreso" ? (
+          <>
+            <Campo label="Planta (de dónde sale)">
+              <select name="planta_id" required className="input">
+                <option value="">Seleccionar…</option>
+                {plantas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            <Campo label="Producto">
+              <select name="producto_id" required className="input">
+                <option value="">Seleccionar…</option>
+                {productos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            <Campo label="Productor (opcional, solo a modo de registro)">
+              <select name="productor_id" className="input">
+                <option value="">No especificar</option>
+                {productores.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+
+            <Campo label="Cantidad (toneladas)">
+              <input
+                name="cantidad"
+                type="number"
+                step="0.001"
+                min="0.001"
+                required
+                className="input"
+              />
+            </Campo>
+
+            <Campo label="Fecha">
+              <input
+                name="fecha"
+                type="date"
+                defaultValue={hoy}
+                required
+                className="input"
+              />
+            </Campo>
+          </>
         ) : (
           <>
             <Campo label="Lote">
@@ -166,21 +224,19 @@ export default function MovimientoForm({
               </select>
             </Campo>
 
-            {tipo === "descarte" && (
-              <Campo label="Motivo">
-                <select
-                  name="motivo"
-                  value={motivoDescarte}
-                  onChange={(e) => setMotivoDescarte(e.target.value)}
-                  className="input"
-                >
-                  <option value="procesamiento">
-                    Procesamiento (pasa de natural a procesado)
-                  </option>
-                  <option value="otro">Otro</option>
-                </select>
-              </Campo>
-            )}
+            <Campo label="Motivo">
+              <select
+                name="motivo"
+                value={motivoDescarte}
+                onChange={(e) => setMotivoDescarte(e.target.value)}
+                className="input"
+              >
+                <option value="procesamiento">
+                  Procesamiento (pasa de natural a procesado)
+                </option>
+                <option value="otro">Otro</option>
+              </select>
+            </Campo>
 
             <Campo label="Cantidad (toneladas)">
               <input
