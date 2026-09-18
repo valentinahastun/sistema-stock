@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { actualizarCaidaEstimada } from "@/app/stock/actions";
+import { useRouter } from "next/navigation";
+import { confirmarCaidaEstimada } from "@/app/stock/actions";
 
 export type LoteDetalle = {
   lote_id: string;
@@ -85,6 +86,7 @@ function DetalleLotes({
           <th className="px-2 py-1 text-right">% caída estim.</th>
           <th className="px-2 py-1 text-right">Descarte estim. (tn)</th>
           <th className="px-2 py-1 text-right">Exportable estim. (tn)</th>
+          <th className="px-2 py-1"></th>
         </tr>
       </thead>
       <tbody>
@@ -103,31 +105,40 @@ function FilaLote({
   lote: LoteDetalle;
   puedeEditar: boolean;
 }) {
+  const router = useRouter();
   const [pct, setPct] = useState(
     lote.caida_pct_estimada !== null ? String(lote.caida_pct_estimada) : ""
   );
-  const [guardando, setGuardando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const pctNum = pct === "" ? null : Number(pct);
-  const valido = pctNum === null || (!Number.isNaN(pctNum) && pctNum >= 0 && pctNum <= 100);
-  const descarteEstimado =
-    valido && pctNum !== null ? (lote.stock_actual_tn * pctNum) / 100 : null;
+  const valido = pctNum !== null && !Number.isNaN(pctNum) && pctNum > 0 && pctNum <= 100;
+  const descarteEstimado = valido ? (lote.stock_actual_tn * (pctNum as number)) / 100 : null;
   const exportableEstimado =
-    valido && pctNum !== null && descarteEstimado !== null
-      ? lote.stock_actual_tn - descarteEstimado
-      : null;
+    valido && descarteEstimado !== null ? lote.stock_actual_tn - descarteEstimado : null;
 
-  async function guardar() {
+  async function confirmar() {
     if (!valido) {
-      setError("Tiene que ser un número entre 0 y 100.");
+      setError("Tiene que ser un número mayor a 0 y hasta 100.");
       return;
     }
-    setGuardando(true);
+    const confirmado = window.confirm(
+      `Se va a cargar un descarte real de ${descarteEstimado?.toFixed(
+        2
+      )} tn en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`
+    );
+    if (!confirmado) return;
+
+    setConfirmando(true);
     setError(null);
-    const resultado = await actualizarCaidaEstimada(lote.lote_id, pct);
-    setGuardando(false);
-    if (!resultado.ok) setError(resultado.error);
+    const resultado = await confirmarCaidaEstimada(lote.lote_id, pct);
+    setConfirmando(false);
+    if (resultado.ok) {
+      router.refresh();
+    } else {
+      setError(resultado.error);
+    }
   }
 
   const esNatural = lote.estado === "natural";
@@ -141,23 +152,16 @@ function FilaLote({
       <td className="px-2 py-1.5 text-right">{lote.stock_actual_tn.toFixed(2)}</td>
       <td className="px-2 py-1.5 text-right">
         {esNatural && puedeEditar ? (
-          <div className="flex flex-col items-end gap-0.5">
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={pct}
-              onChange={(e) => setPct(e.target.value)}
-              onBlur={guardar}
-              className="w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs"
-              placeholder="—"
-            />
-            {guardando && (
-              <span className="text-[10px] text-gray-400">Guardando…</span>
-            )}
-            {error && <span className="text-[10px] text-red-600">{error}</span>}
-          </div>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={pct}
+            onChange={(e) => setPct(e.target.value)}
+            className="w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs"
+            placeholder="—"
+          />
         ) : esNatural ? (
           lote.caida_pct_estimada !== null ? `${lote.caida_pct_estimada}%` : "—"
         ) : (
@@ -169,6 +173,23 @@ function FilaLote({
       </td>
       <td className="px-2 py-1.5 text-right">
         {exportableEstimado !== null ? exportableEstimado.toFixed(2) : "—"}
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        {esNatural && puedeEditar && (
+          <div className="flex flex-col items-end gap-0.5">
+            <button
+              type="button"
+              onClick={confirmar}
+              disabled={confirmando || !valido}
+              className="text-white bg-brand-green hover:bg-brand-green-dark rounded px-2 py-0.5 text-[11px] disabled:opacity-40"
+            >
+              {confirmando ? "Cargando…" : "Confirmar"}
+            </button>
+            {error && (
+              <span className="text-[10px] text-red-600 max-w-[110px]">{error}</span>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );
