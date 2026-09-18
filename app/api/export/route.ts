@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from("movimientos_stock")
         .select(
-          "fecha, tipo, cantidad, motivo, observaciones, lotes(numero_cp, estado, plantas(nombre), productos(nombre), productores(nombre))"
+          "fecha, tipo, cantidad, motivo, observaciones, lotes!lote_id(numero_cp, estado, plantas(nombre), productos(nombre), productores(nombre))"
         )
         .order("fecha", { ascending: false }),
     ]);
@@ -107,3 +107,4 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
