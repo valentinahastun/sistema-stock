@@ -3,13 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import BotonEliminarCalidad from "@/components/BotonEliminarCalidad";
- 
+
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
   if (!rel) return "";
   return Array.isArray(rel) ? rel[0]?.nombre ?? "" : rel.nombre;
 }
- 
+
 export default async function CalidadPage({
   searchParams,
 }: {
@@ -19,7 +19,7 @@ export default async function CalidadPage({
   const supabase = createClient();
   const esAdmin = perfil?.rol === "admin";
   const puedeCargar = perfil?.rol === "admin" || perfil?.rol === "calidad";
- 
+
   const [{ data: plantas }, { data: productos }, { data: productores }, { data: registros }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
@@ -28,12 +28,12 @@ export default async function CalidadPage({
       supabase
         .from("registros_calidad")
         .select(
-          "id, fecha, pct_bajo_zaranda, pct_partidos, pct_arrugados, pct_otros_granos, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
+          "id, fecha, pct_bajo_zaranda, pct_partidos, pct_arrugados, pct_otros_granos, pct_roido_picado, pct_humedad, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
         )
         .order("fecha", { ascending: false })
         .limit(300),
     ]);
- 
+
   type FilaRegistro = {
     id: string;
     fecha: string;
@@ -41,6 +41,8 @@ export default async function CalidadPage({
     pct_partidos: number | null;
     pct_arrugados: number | null;
     pct_otros_granos: number | null;
+    pct_roido_picado: number | null;
+    pct_humedad: number | null;
     fotos: string[] | null;
     lote_id: string | null;
     numero_contrato: string | null;
@@ -60,9 +62,9 @@ export default async function CalidadPage({
     productos: Rel;
     productores: Rel;
   };
- 
+
   const todasLasFilas = (registros ?? []) as unknown as FilaRegistro[];
- 
+
   // Para cada fila, la planta/producto/productor salen del lote si ya
   // está vinculada, o de las columnas propias si todavía es un registro
   // suelto (analizado antes de que se cargara el ingreso al sistema).
@@ -90,7 +92,7 @@ export default async function CalidadPage({
       vinculado: false,
     };
   }
- 
+
   let filas = todasLasFilas;
   if (searchParams.planta_id) {
     filas = filas.filter((f) => datosFila(f).planta_id === searchParams.planta_id);
@@ -101,15 +103,15 @@ export default async function CalidadPage({
   if (searchParams.productor_id) {
     filas = filas.filter((f) => datosFila(f).productor_id === searchParams.productor_id);
   }
- 
+
   const pct = (n: number | null) => (n === null ? "—" : `${Number(n).toFixed(2)}%`);
- 
+
   return (
     <div>
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-navy">
         ← Volver al panel
       </Link>
- 
+
       <div className="flex items-center justify-between mt-2 mb-4">
         <h1 className="text-xl font-semibold text-brand-navy">Calidad</h1>
         {puedeCargar && (
@@ -121,7 +123,7 @@ export default async function CalidadPage({
           </Link>
         )}
       </div>
- 
+
       <FiltroStock
         plantas={plantas ?? []}
         productos={productos ?? []}
@@ -131,7 +133,7 @@ export default async function CalidadPage({
         productorSeleccionado={searchParams.productor_id ?? ""}
         basePath="/calidad"
       />
- 
+
       <div className="bg-white rounded-lg shadow mt-4 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -145,6 +147,8 @@ export default async function CalidadPage({
               <th className="px-4 py-2 text-right">Partidos</th>
               <th className="px-4 py-2 text-right">Arrugados</th>
               <th className="px-4 py-2 text-right">Otros granos</th>
+              <th className="px-4 py-2 text-right">Roído / picado</th>
+              <th className="px-4 py-2 text-right">Humedad</th>
               <th className="px-4 py-2">Fotos</th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
@@ -169,6 +173,8 @@ export default async function CalidadPage({
                   <td className="px-4 py-2 text-right">{pct(f.pct_partidos)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_arrugados)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_otros_granos)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_roido_picado)}</td>
+                  <td className="px-4 py-2 text-right">{pct(f.pct_humedad)}</td>
                   <td className="px-4 py-2">
                     {f.fotos && f.fotos.length > 0 ? (
                       <div className="flex gap-1">
@@ -201,7 +207,7 @@ export default async function CalidadPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 11 : 10} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 13 : 12} className="px-4 py-6 text-center text-gray-400">
                   No hay registros de calidad todavía para este filtro.
                 </td>
               </tr>
