@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
-import FilaStock, { type LoteDetalle } from "@/components/FilaStock";
+import StockAgrupado, { type LoteDetalle, type FilaBase } from "@/components/FilaStock";
 
 export default async function StockPage({
   searchParams,
@@ -51,14 +51,18 @@ export default async function StockPage({
     );
   });
 
-  let filas = (stock ?? []).map((s) => {
+  let filas: FilaBase[] = (stock ?? []).map((s) => {
     const clave = `${s.planta_id}-${s.producto_id}`;
     const comprometidoTn = comprometidoPorClave.get(clave) ?? 0;
+    const stockDisponibleTn = Number(s.stock_disponible_tn);
     return {
-      ...s,
-      stock_disponible_tn: Number(s.stock_disponible_tn),
-      comprometido_tn: comprometidoTn,
-      libre_tn: Number(s.stock_disponible_tn) - comprometidoTn,
+      planta_id: s.planta_id,
+      planta: s.planta,
+      producto_id: s.producto_id,
+      producto: s.producto,
+      stockDisponibleTn,
+      comprometidoTn,
+      libreTn: stockDisponibleTn - comprometidoTn,
     };
   });
 
@@ -69,7 +73,7 @@ export default async function StockPage({
     filas = filas.filter((f) => f.producto_id === searchParams.producto_id);
   }
 
-  const totalDisponible = filas.reduce((acc, f) => acc + f.stock_disponible_tn, 0);
+  const totalDisponible = filas.reduce((acc, f) => acc + f.stockDisponibleTn, 0);
 
   const paramsExport = new URLSearchParams();
   if (searchParams.planta_id) paramsExport.set("planta_id", searchParams.planta_id);
@@ -99,53 +103,29 @@ export default async function StockPage({
         basePath="/stock"
       />
 
-      <div className="bg-white rounded-lg shadow mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b bg-brand-green-light">
-              <th className="px-4 py-2">Planta</th>
-              <th className="px-4 py-2">Producto</th>
-              <th className="px-4 py-2 text-right">Disponible (tn)</th>
-              <th className="px-4 py-2 text-right">Comprometido (tn)</th>
-              <th className="px-4 py-2 text-right">Libre (tn)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((f) => (
-              <FilaStock
-                key={`${f.planta_id}-${f.producto_id}`}
-                planta={f.planta}
-                producto={f.producto}
-                stockDisponibleTn={f.stock_disponible_tn}
-                comprometidoTn={f.comprometido_tn}
-                libreTn={f.libre_tn}
-                lotes={lotesPorClave.get(`${f.planta_id}-${f.producto_id}`) ?? []}
-                puedeEditar={puedeEditar}
-              />
-            ))}
-            {filas.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
-                  No hay stock cargado todavía para este filtro.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="mt-4">
+        <StockAgrupado
+          filas={filas}
+          lotesPorClave={lotesPorClave}
+          puedeEditar={puedeEditar}
+        />
       </div>
 
       <p className="text-sm text-gray-500 mt-3">
         Total disponible: {totalDisponible.toFixed(2)} tn
       </p>
       <p className="text-xs text-gray-400 mt-1">
-        Hacé clic en el nombre de la planta para ver el detalle por lote. En
-        los lotes "natural" podés poner el % de caída y confirmarlo: eso
-        carga el descarte real sobre ese lote (que pasa a "procesado") y da
-        de alta, como stock propio, el ingreso del producto de descarte
-        correspondiente (por ejemplo Descarte Negro). Si te equivocaste de
-        %, podés borrar ese descarte desde Movimientos y el lote vuelve a
-        quedar "natural" para volver a intentarlo.
+        Hacé clic en una planta (o un producto, según cómo estés agrupando)
+        para desplegar el detalle. Ahí adentro, hacé clic en cada producto
+        para ver el detalle por lote. En los lotes "natural" podés poner el
+        % de caída y confirmarlo: eso carga el descarte real sobre ese lote
+        (que pasa a "procesado") y da de alta, como stock propio, el ingreso
+        del producto de descarte correspondiente (por ejemplo Descarte
+        Negro). Si te equivocaste de %, podés borrar ese descarte desde
+        Movimientos y el lote vuelve a quedar "natural" para volver a
+        intentarlo.
       </p>
     </div>
   );
 }
+
