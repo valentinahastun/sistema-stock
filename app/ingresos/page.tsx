@@ -25,7 +25,7 @@ export default async function IngresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, observaciones, lotes!lote_id(numero_cp, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
+        "id, cantidad, fecha, observaciones, lotes!lote_id(numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
       .order("fecha", { ascending: false })
@@ -39,6 +39,9 @@ export default async function IngresosPage({
     observaciones: string | null;
     lotes: {
       numero_cp: string | null;
+      transportista: string | null;
+      chofer: string | null;
+      patente: string | null;
       estado: string;
       planta_id: string;
       producto_id: string;
@@ -86,6 +89,7 @@ export default async function IngresosPage({
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2">Estado</th>
+              <th className="px-4 py-2">CP / Transporte</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Observaciones</th>
               {esAdmin && <th className="px-4 py-2"></th>}
@@ -99,6 +103,21 @@ export default async function IngresosPage({
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productos ?? null)}</td>
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productores ?? null)}</td>
                 <td className="px-4 py-2 capitalize">{f.lotes?.estado}</td>
+                <td className="px-4 py-2 text-xs text-gray-600">
+                  {f.lotes?.numero_cp && <div>CP {f.lotes.numero_cp}</div>}
+                  {(f.lotes?.transportista || f.lotes?.chofer || f.lotes?.patente) && (
+                    <div className="text-gray-400">
+                      {[f.lotes?.transportista, f.lotes?.chofer, f.lotes?.patente]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  )}
+                  {!f.lotes?.numero_cp &&
+                    !f.lotes?.transportista &&
+                    !f.lotes?.chofer &&
+                    !f.lotes?.patente &&
+                    "—"}
+                </td>
                 <td className="px-4 py-2 text-right font-medium">
                   {Number(f.cantidad).toFixed(2)}
                 </td>
@@ -112,7 +131,7 @@ export default async function IngresosPage({
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 9 : 8} className="px-4 py-6 text-center text-gray-400">
                   No hay ingresos cargados todavía para este filtro.
                 </td>
               </tr>
