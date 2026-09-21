@@ -169,6 +169,7 @@ export default async function CalidadPage({
               <th className="px-4 py-2 text-right">Bajo zaranda</th>
               <th className="px-4 py-2">Observaciones</th>
               <th className="px-4 py-2">Fotos / Videos</th>
+              <th className="px-4 py-2"></th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
@@ -237,6 +238,14 @@ export default async function CalidadPage({
                       "—"
                     )}
                   </td>
+                  <td className="px-4 py-2">
+                    <a
+                      href={`/api/calidad/${f.id}/pdf`}
+                      className="text-xs bg-brand-navy hover:bg-brand-navy-dark text-white rounded px-2 py-1 whitespace-nowrap"
+                    >
+                      Descargar PDF
+                    </a>
+                  </td>
                   {esAdmin && (
                     <td className="px-4 py-2">
                       <BotonEliminarCalidad registroId={f.id} />
@@ -247,7 +256,7 @@ export default async function CalidadPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 19 : 18} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 20 : 19} className="px-4 py-6 text-center text-gray-400">
                   No hay registros de calidad todavía para este filtro.
                 </td>
               </tr>
