@@ -25,7 +25,7 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, cantidad, fecha, motivo, observaciones, numero_cp, transportista, chofer, patente, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
       .order("fecha", { ascending: false })
@@ -38,6 +38,10 @@ export default async function EgresosPage({
     fecha: string;
     motivo: string | null;
     observaciones: string | null;
+    numero_cp: string | null;
+    transportista: string | null;
+    chofer: string | null;
+    patente: string | null;
     planta_id: string | null;
     producto_id: string | null;
     productor_id: string | null;
@@ -111,6 +115,7 @@ export default async function EgresosPage({
               <th className="px-4 py-2">Planta (origen)</th>
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
+              <th className="px-4 py-2">CP / Transporte</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Destino / motivo</th>
               <th className="px-4 py-2">Observaciones</th>
@@ -126,6 +131,15 @@ export default async function EgresosPage({
                   <td className="px-4 py-2">{d.planta}</td>
                   <td className="px-4 py-2">{d.producto}</td>
                   <td className="px-4 py-2">{d.productor}</td>
+                  <td className="px-4 py-2 text-xs text-gray-600">
+                    {f.numero_cp && <div>CP {f.numero_cp}</div>}
+                    {(f.transportista || f.chofer || f.patente) && (
+                      <div className="text-gray-400">
+                        {[f.transportista, f.chofer, f.patente].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && "—"}
+                  </td>
                   <td className="px-4 py-2 text-right font-medium">
                     {Number(f.cantidad).toFixed(2)}
                   </td>
@@ -141,7 +155,7 @@ export default async function EgresosPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 8 : 7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 9 : 8} className="px-4 py-6 text-center text-gray-400">
                   No hay egresos cargados todavía para este filtro.
                 </td>
               </tr>
