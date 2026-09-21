@@ -1,0 +1,63 @@
+import { NextRequest } from "next/server";
+import { getPerfilActual } from "@/lib/supabase/profile";
+import { parseCp, reconstruirLineas } from "@/lib/parseCp";
+
+// Lee un PDF de Carta de Porte Electrónica (ARCA) subido desde el
+// formulario de movimientos y devuelve los datos "neutros" que se pueden
+// autocompletar (transportista, chofer, patente, pesos, fechas). Nunca
+// intenta determinar planta, producto ni si es ingreso o egreso: eso lo
+// sigue eligiendo la persona que carga el movimiento.
+
+export async function POST(request: NextRequest): Promise<Response> {
+  const perfil = await getPerfilActual();
+  if (!perfil || perfil.rol !== "admin") {
+    return Response.json({ ok: false, error: "No autorizado." }, { status: 401 });
+  }
+
+  let archivo: File | null = null;
+  try {
+    const formData = await request.formData();
+    const f = formData.get("archivo");
+    if (f instanceof File) archivo = f;
+  } catch (e) {
+    return Response.json(
+      { ok: false, error: `No se pudo leer el archivo enviado: ${(e as Error).message}` },
+      { status: 400 }
+    );
+  }
+
+  if (!archivo) {
+    return Response.json({ ok: false, error: "Falta el archivo PDF." }, { status: 400 });
+  }
+  if (archivo.type && archivo.type !== "application/pdf") {
+    return Response.json({ ok: false, error: "El archivo tiene que ser un PDF." }, { status: 400 });
+  }
+
+  try {
+    const buffer = new Uint8Array(await archivo.arrayBuffer());
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjsLib.getDocument({
+      data: buffer,
+      useSystemFonts: true,
+      isEvalSupported: false,
+    }).promise;
+
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const items = content.items
+      .filter((it): it is typeof it & { str: string; transform: number[] } => "str" in it)
+      .map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5] }));
+
+    const lineas = reconstruirLineas(items);
+    const datos = parseCp(lineas);
+
+    await doc.destroy();
+
+    return Response.json({ ok: true, datos });
+  } catch (e) {
+    return Response.json(
+      { ok: false, error: `No se pudo leer el PDF: ${(e as Error).message}` },
+      { status: 422 }
+    );
+  }
+}
