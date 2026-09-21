@@ -151,6 +151,7 @@ export default async function CalidadPage({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left border-b bg-brand-green-light">
+              <th className="px-4 py-2"></th>
               <th className="px-4 py-2">Fecha</th>
               <th className="px-4 py-2">Planta</th>
               <th className="px-4 py-2">Producto</th>
@@ -169,7 +170,6 @@ export default async function CalidadPage({
               <th className="px-4 py-2 text-right">Bajo zaranda</th>
               <th className="px-4 py-2">Observaciones</th>
               <th className="px-4 py-2">Fotos / Videos</th>
-              <th className="px-4 py-2"></th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
           </thead>
@@ -178,6 +178,14 @@ export default async function CalidadPage({
               const d = datosFila(f);
               return (
                 <tr key={f.id} className="border-b last:border-0">
+                  <td className="px-4 py-2">
+                    <a
+                      href={`/api/calidad/${f.id}/pdf`}
+                      className="text-xs bg-brand-navy hover:bg-brand-navy-dark text-white rounded px-2 py-1 whitespace-nowrap"
+                    >
+                      Descargar PDF
+                    </a>
+                  </td>
                   <td className="px-4 py-2 whitespace-nowrap">{f.fecha}</td>
                   <td className="px-4 py-2">{d.planta}</td>
                   <td className="px-4 py-2">{d.producto}</td>
@@ -237,14 +245,6 @@ export default async function CalidadPage({
                     ) : (
                       "—"
                     )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <a
-                      href={`/api/calidad/${f.id}/pdf`}
-                      className="text-xs bg-brand-navy hover:bg-brand-navy-dark text-white rounded px-2 py-1 whitespace-nowrap"
-                    >
-                      Descargar PDF
-                    </a>
                   </td>
                   {esAdmin && (
                     <td className="px-4 py-2">
