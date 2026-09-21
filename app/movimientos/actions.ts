@@ -26,6 +26,9 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
     const productor_id = formData.get("productor_id") as string;
     const estado = formData.get("estado") as string;
     const numero_cp = (formData.get("numero_cp") as string) || null;
+    const transportista = (formData.get("transportista") as string) || null;
+    const chofer = (formData.get("chofer") as string) || null;
+    const patente = (formData.get("patente") as string) || null;
     const fecha_ingreso = formData.get("fecha") as string;
     const cantidad = Number(formData.get("cantidad"));
     const observaciones = (formData.get("observaciones") as string) || null;
@@ -42,6 +45,9 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
         productor_id,
         estado,
         numero_cp,
+        transportista,
+        chofer,
+        patente,
         fecha_ingreso,
         cantidad_ingresada: cantidad,
       })
@@ -123,6 +129,10 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
     const planta_id = formData.get("planta_id") as string;
     const producto_id = formData.get("producto_id") as string;
     const productor_id = (formData.get("productor_id") as string) || null;
+    const numero_cp = (formData.get("numero_cp") as string) || null;
+    const transportista = (formData.get("transportista") as string) || null;
+    const chofer = (formData.get("chofer") as string) || null;
+    const patente = (formData.get("patente") as string) || null;
     const cantidad = Number(formData.get("cantidad"));
     const fecha = formData.get("fecha") as string;
     const observaciones = (formData.get("observaciones") as string) || null;
@@ -153,6 +163,10 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       planta_id,
       producto_id,
       productor_id,
+      numero_cp,
+      transportista,
+      chofer,
+      patente,
       cantidad,
       fecha,
       observaciones,
