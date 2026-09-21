@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { crearIngreso, crearMovimiento, crearEgreso } from "@/app/movimientos/actions";
 
 type Catalogo = { id: string; nombre: string };
@@ -12,6 +12,18 @@ type Lote = {
   plantas: { nombre: string }[] | { nombre: string } | null;
   productos: { nombre: string }[] | { nombre: string } | null;
   productores: { nombre: string }[] | { nombre: string } | null;
+};
+
+type DatosCp = {
+  numeroCpe: string | null;
+  ctg: string | null;
+  chofer: string | null;
+  transportista: string | null;
+  patente: string | null;
+  pesoNetoCargaKg: number | null;
+  pesoNetoDescargaKg: number | null;
+  fechaPartida: string | null;
+  fechaDescarga: string | null;
 };
 
 // Supabase puede devolver la relación embebida como objeto o como array
@@ -43,6 +55,82 @@ export default function MovimientoForm({
 
   const hoy = new Date().toISOString().slice(0, 10);
 
+  // Campos que se pueden autocompletar leyendo el PDF de la Carta de Porte.
+  // Quedan editables: leer la CP solo ahorra tipeo, la persona sigue
+  // pudiendo corregir cualquier valor antes de guardar.
+  const [numeroCp, setNumeroCp] = useState("");
+  const [transportista, setTransportista] = useState("");
+  const [chofer, setChofer] = useState("");
+  const [patente, setPatente] = useState("");
+  const [cantidad, setCantidad] = useState("");
+  const [fecha, setFecha] = useState(hoy);
+  const [leyendoCp, setLeyendoCp] = useState(false);
+  const [mensajeCp, setMensajeCp] = useState<
+    { tipo: "ok" | "error"; texto: string } | null
+  >(null);
+  const inputCpRef = useRef<HTMLInputElement>(null);
+
+  function limpiarCamposCp() {
+    setNumeroCp("");
+    setTransportista("");
+    setChofer("");
+    setPatente("");
+    setCantidad("");
+    setFecha(hoy);
+    setMensajeCp(null);
+    if (inputCpRef.current) inputCpRef.current.value = "";
+  }
+
+  async function handleLeerCp(archivo: File, tipoActual: "ingreso" | "egreso") {
+    setLeyendoCp(true);
+    setMensajeCp(null);
+    try {
+      const formData = new FormData();
+      formData.append("archivo", archivo);
+      const res = await fetch("/api/cp/parse", { method: "POST", body: formData });
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        setMensajeCp({ tipo: "error", texto: json.error ?? "No se pudo leer la CP." });
+        return;
+      }
+
+      const datos = json.datos as DatosCp;
+      const faltantes: string[] = [];
+
+      if (datos.numeroCpe) setNumeroCp(datos.numeroCpe);
+      if (datos.transportista) setTransportista(datos.transportista);
+      else faltantes.push("transportista");
+      if (datos.chofer) setChofer(datos.chofer);
+      else faltantes.push("chofer");
+      if (datos.patente) setPatente(datos.patente);
+      else faltantes.push("patente");
+
+      const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
+      if (pesoKg) {
+        setCantidad((pesoKg / 1000).toFixed(3));
+      } else {
+        faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
+      }
+
+      const fechaCp = tipoActual === "ingreso" ? datos.fechaDescarga : datos.fechaPartida;
+      if (fechaCp) setFecha(fechaCp);
+
+      if (faltantes.length > 0) {
+        setMensajeCp({
+          tipo: "error",
+          texto: `Se completó lo que se pudo leer, pero faltó en el PDF: ${faltantes.join(", ")}. Completalo a mano.`,
+        });
+      } else {
+        setMensajeCp({ tipo: "ok", texto: "Datos de la CP cargados. Revisalos antes de guardar." });
+      }
+    } catch (e) {
+      setMensajeCp({ tipo: "error", texto: `No se pudo leer el PDF: ${(e as Error).message}` });
+    } finally {
+      setLeyendoCp(false);
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
     setEnviando(true);
     setMensaje(null);
@@ -59,9 +147,43 @@ export default function MovimientoForm({
     if (resultado.ok) {
       setMensaje({ tipo: "ok", texto: "Movimiento cargado correctamente." });
       (document.getElementById("form-movimiento") as HTMLFormElement)?.reset();
+      limpiarCamposCp();
     } else {
       setMensaje({ tipo: "error", texto: resultado.error });
     }
+  }
+
+  function CampoCp() {
+    return (
+      <div className="border border-dashed border-gray-300 rounded-md p-3 bg-gray-50">
+        <label className="block text-sm text-gray-600 mb-1">
+          Cargar Carta de Porte (PDF, opcional)
+        </label>
+        <input
+          ref={inputCpRef}
+          type="file"
+          accept="application/pdf"
+          disabled={leyendoCp}
+          onChange={(e) => {
+            const archivo = e.target.files?.[0];
+            if (archivo && (tipo === "ingreso" || tipo === "egreso")) {
+              handleLeerCp(archivo, tipo);
+            }
+          }}
+          className="text-sm"
+        />
+        {leyendoCp && <p className="text-xs text-gray-500 mt-1">Leyendo PDF…</p>}
+        {mensajeCp && (
+          <p
+            className={`text-xs mt-1 ${
+              mensajeCp.tipo === "ok" ? "text-green-700" : "text-amber-700"
+            }`}
+          >
+            {mensajeCp.texto}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -88,6 +210,8 @@ export default function MovimientoForm({
 
         {tipo === "ingreso" ? (
           <>
+            <CampoCp />
+
             <Campo label="Planta">
               <select name="planta_id" required className="input">
                 <option value="">Seleccionar…</option>
@@ -129,7 +253,39 @@ export default function MovimientoForm({
             </Campo>
 
             <Campo label="Número de CP">
-              <input name="numero_cp" className="input" />
+              <input
+                name="numero_cp"
+                className="input"
+                value={numeroCp}
+                onChange={(e) => setNumeroCp(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Transportista">
+              <input
+                name="transportista"
+                className="input"
+                value={transportista}
+                onChange={(e) => setTransportista(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Chofer">
+              <input
+                name="chofer"
+                className="input"
+                value={chofer}
+                onChange={(e) => setChofer(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Patente">
+              <input
+                name="patente"
+                className="input"
+                value={patente}
+                onChange={(e) => setPatente(e.target.value)}
+              />
             </Campo>
 
             <Campo label="Cantidad (toneladas)">
@@ -140,6 +296,8 @@ export default function MovimientoForm({
                 min="0.001"
                 required
                 className="input"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
               />
             </Campo>
 
@@ -147,14 +305,17 @@ export default function MovimientoForm({
               <input
                 name="fecha"
                 type="date"
-                defaultValue={hoy}
                 required
                 className="input"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
               />
             </Campo>
           </>
         ) : tipo === "egreso" ? (
           <>
+            <CampoCp />
+
             <Campo label="Planta (de dónde sale)">
               <select name="planta_id" required className="input">
                 <option value="">Seleccionar…</option>
@@ -188,6 +349,42 @@ export default function MovimientoForm({
               </select>
             </Campo>
 
+            <Campo label="Número de CP">
+              <input
+                name="numero_cp"
+                className="input"
+                value={numeroCp}
+                onChange={(e) => setNumeroCp(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Transportista">
+              <input
+                name="transportista"
+                className="input"
+                value={transportista}
+                onChange={(e) => setTransportista(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Chofer">
+              <input
+                name="chofer"
+                className="input"
+                value={chofer}
+                onChange={(e) => setChofer(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Patente">
+              <input
+                name="patente"
+                className="input"
+                value={patente}
+                onChange={(e) => setPatente(e.target.value)}
+              />
+            </Campo>
+
             <Campo label="Cantidad (toneladas)">
               <input
                 name="cantidad"
@@ -196,6 +393,8 @@ export default function MovimientoForm({
                 min="0.001"
                 required
                 className="input"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
               />
             </Campo>
 
@@ -203,9 +402,10 @@ export default function MovimientoForm({
               <input
                 name="fecha"
                 type="date"
-                defaultValue={hoy}
                 required
                 className="input"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
               />
             </Campo>
           </>
