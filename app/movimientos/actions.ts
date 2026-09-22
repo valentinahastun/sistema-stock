@@ -314,6 +314,16 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
       );
       if (!logMov.ok) return logMov;
 
+      // Este movimiento (el descarte por "% de caída estimada") es el que
+      // tiene descarte_generado_lote_id apuntando al lote de descarte. Hay
+      // que borrarlo primero: si se intenta borrar el lote antes, la base
+      // rechaza el borrado porque esta fila todavía lo referencia.
+      const { error: errorDel } = await supabase
+        .from("movimientos_stock")
+        .delete()
+        .eq("id", movimiento.id);
+      if (errorDel) return { ok: false, error: errorDel.message };
+
       if (loteDescarteId) {
         const { data: movIngresoDescarte } = await supabase
           .from("movimientos_stock")
@@ -365,12 +375,6 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
           }
         }
       }
-
-      const { error: errorDel } = await supabase
-        .from("movimientos_stock")
-        .delete()
-        .eq("id", movimiento.id);
-      if (errorDel) return { ok: false, error: errorDel.message };
 
       // Si era el descarte que había marcado el lote como "procesado" y no
       // queda ningún otro descarte de procesamiento, el lote vuelve a "natural".
