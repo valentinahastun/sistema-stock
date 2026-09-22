@@ -78,30 +78,44 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
   }
 }
 
-// Descarte sobre un lote existente (sigue siendo siempre puntual: es el
-// que puede pasar el lote a "procesado").
-export async function crearMovimiento(formData: FormData): Promise<Resultado> {
+// Movimiento "directo": compra y venta que nunca pasa por el depósito
+// propio. No toca ninguna planta ni resta/suma stock: solo queda
+// registrado (producto, cantidad, CP, transporte) junto con
+// titular/productor/destino tal como figuran en la CP, a modo de
+// trazabilidad de por dónde pasó la mercadería.
+export async function crearMovimientoDirecto(formData: FormData): Promise<Resultado> {
   try {
     await verificarAdmin();
     const supabase = createClient();
 
-    const lote_id = formData.get("lote_id") as string;
-    const tipo = formData.get("tipo") as string;
+    const producto_id = formData.get("producto_id") as string;
+    const numero_cp = (formData.get("numero_cp") as string) || null;
+    const transportista = (formData.get("transportista") as string) || null;
+    const chofer = (formData.get("chofer") as string) || null;
+    const patente = (formData.get("patente") as string) || null;
+    const titular = (formData.get("titular") as string) || null;
+    const productor_texto = (formData.get("productor_texto") as string) || null;
+    const destino = (formData.get("destino") as string) || null;
     const cantidad = Number(formData.get("cantidad"));
     const fecha = formData.get("fecha") as string;
-    const motivo = (formData.get("motivo") as string) || null;
     const observaciones = (formData.get("observaciones") as string) || null;
 
-    if (!lote_id || !tipo || !cantidad) {
+    if (!producto_id || !cantidad) {
       return { ok: false, error: "Faltan datos obligatorios." };
     }
 
     const { error } = await supabase.from("movimientos_stock").insert({
-      lote_id,
-      tipo,
+      tipo: "directo",
+      producto_id,
+      numero_cp,
+      transportista,
+      chofer,
+      patente,
+      titular,
+      productor_texto,
+      destino,
       cantidad,
       fecha,
-      motivo,
       observaciones,
     });
 
@@ -111,6 +125,7 @@ export async function crearMovimiento(formData: FormData): Promise<Resultado> {
 
     revalidatePath("/");
     revalidatePath("/movimientos");
+    revalidatePath("/directos");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -133,6 +148,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
     const transportista = (formData.get("transportista") as string) || null;
     const chofer = (formData.get("chofer") as string) || null;
     const patente = (formData.get("patente") as string) || null;
+    const destino = (formData.get("destino") as string) || null;
     const cantidad = Number(formData.get("cantidad"));
     const fecha = formData.get("fecha") as string;
     const observaciones = (formData.get("observaciones") as string) || null;
@@ -167,6 +183,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       transportista,
       chofer,
       patente,
+      destino,
       cantidad,
       fecha,
       observaciones,
