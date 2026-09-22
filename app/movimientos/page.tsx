@@ -22,18 +22,11 @@ export default async function MovimientosPage() {
     );
   }
 
-  const [{ data: plantas }, { data: productos }, { data: productores }, { data: lotes }, { data: descartes }] =
+  const [{ data: plantas }, { data: productos }, { data: productores }, { data: descartes }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
       supabase.from("productores").select("id, nombre").order("nombre"),
-      supabase
-        .from("lotes")
-        .select(
-          "id, numero_cp, estado, fecha_ingreso, plantas(nombre), productos(nombre), productores(nombre)"
-        )
-        .order("fecha_ingreso", { ascending: false })
-        .limit(200),
       supabase
         .from("movimientos_stock")
         .select(
@@ -61,7 +54,6 @@ export default async function MovimientosPage() {
         plantas={plantas ?? []}
         productos={productos ?? []}
         productores={productores ?? []}
-        lotes={lotes ?? []}
       />
 
       <h2 className="text-lg font-semibold mt-8 mb-3 text-brand-navy">
@@ -109,5 +101,3 @@ export default async function MovimientosPage() {
     </div>
   );
 }
-
-
