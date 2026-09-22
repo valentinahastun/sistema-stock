@@ -35,6 +35,16 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   try {
     const buffer = new Uint8Array(await archivo.arrayBuffer());
+
+    // pdfjs-dist usa DOMMatrix (una API de navegador) para algunas
+    // transformaciones internas, incluso al extraer solo texto. En el
+    // entorno serverless de Vercel (Node, sin navegador) no existe, así
+    // que se completa con una implementación mínima antes de cargar pdfjs.
+    if (typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix === "undefined") {
+      const { default: DOMMatrixPolyfill } = await import("dommatrix");
+      (globalThis as { DOMMatrix?: unknown }).DOMMatrix = DOMMatrixPolyfill;
+    }
+
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const doc = await pdfjsLib.getDocument({
       data: buffer,
