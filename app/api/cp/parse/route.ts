@@ -45,6 +45,22 @@ export async function POST(request: NextRequest): Promise<Response> {
       (globalThis as { DOMMatrix?: unknown }).DOMMatrix = DOMMatrixPolyfill;
     }
 
+    // pdfjs-dist normalmente arranca un Worker de navegador para procesar
+    // el PDF en otro hilo. En Node (Vercel) eso no existe, así que pdfjs
+    // cae a un "fake worker": intenta importar su propio archivo
+    // pdf.worker.mjs con una ruta relativa calculada en tiempo de
+    // ejecución. Ese import relativo no sobrevive al empaquetado de
+    // Next.js/Vercel (el archivo físico no queda en la ruta esperada
+    // dentro del bundle serverless), y falla con "Cannot find module
+    // .../pdf.worker.mjs". Para evitarlo, importamos nosotros mismos el
+    // módulo del worker (con una ruta fija que sí puede empaquetar
+    // Next.js) y lo dejamos en globalThis.pdfjsWorker: pdfjs revisa ese
+    // global primero y, si está, nunca intenta el import relativo roto.
+    if (typeof (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker === "undefined") {
+      const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = workerModule;
+    }
+
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const doc = await pdfjsLib.getDocument({
       data: buffer,
