@@ -1,18 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { crearIngreso, crearMovimiento, crearEgreso } from "@/app/movimientos/actions";
+import { crearIngreso, crearMovimientoDirecto, crearEgreso } from "@/app/movimientos/actions";
 
 type Catalogo = { id: string; nombre: string };
-type Lote = {
-  id: string;
-  numero_cp: string | null;
-  estado: string;
-  fecha_ingreso: string;
-  plantas: { nombre: string }[] | { nombre: string } | null;
-  productos: { nombre: string }[] | { nombre: string } | null;
-  productores: { nombre: string }[] | { nombre: string } | null;
-};
 
 type DatosCp = {
   numeroCpe: string | null;
@@ -22,32 +13,24 @@ type DatosCp = {
   patente: string | null;
   pesoNetoCargaKg: number | null;
   pesoNetoDescargaKg: number | null;
-  fechaPartida: string | null;
-  fechaDescarga: string | null;
+  fecha: string | null;
+  titular: string | null;
+  productor: string | null;
+  destino: string | null;
 };
 
-// Supabase puede devolver la relación embebida como objeto o como array
-// según la versión del cliente; esto normaliza ambos casos.
-function nombreDe(rel: { nombre: string }[] | { nombre: string } | null): string {
-  if (!rel) return "";
-  return Array.isArray(rel) ? rel[0]?.nombre ?? "" : rel.nombre;
-}
+type Tipo = "ingreso" | "egreso" | "directo";
 
 export default function MovimientoForm({
   plantas,
   productos,
   productores,
-  lotes,
 }: {
   plantas: Catalogo[];
   productos: Catalogo[];
   productores: Catalogo[];
-  lotes: Lote[];
 }) {
-  const [tipo, setTipo] = useState<"ingreso" | "descarte" | "egreso">(
-    "ingreso"
-  );
-  const [motivoDescarte, setMotivoDescarte] = useState("procesamiento");
+  const [tipo, setTipo] = useState<Tipo>("ingreso");
   const [mensaje, setMensaje] = useState<
     { tipo: "ok" | "error"; texto: string } | null
   >(null);
@@ -64,6 +47,9 @@ export default function MovimientoForm({
   const [patente, setPatente] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [fecha, setFecha] = useState(hoy);
+  const [destino, setDestino] = useState("");
+  const [titular, setTitular] = useState("");
+  const [productor, setProductor] = useState("");
   const [leyendoCp, setLeyendoCp] = useState(false);
   const [mensajeCp, setMensajeCp] = useState<
     { tipo: "ok" | "error"; texto: string } | null
@@ -77,11 +63,14 @@ export default function MovimientoForm({
     setPatente("");
     setCantidad("");
     setFecha(hoy);
+    setDestino("");
+    setTitular("");
+    setProductor("");
     setMensajeCp(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
   }
 
-  async function handleLeerCp(archivo: File, tipoActual: "ingreso" | "egreso") {
+  async function handleLeerCp(archivo: File, tipoActual: Tipo) {
     setLeyendoCp(true);
     setMensajeCp(null);
     try {
@@ -106,6 +95,9 @@ export default function MovimientoForm({
       if (datos.patente) setPatente(datos.patente);
       else faltantes.push("patente");
 
+      // Ingreso toma el peso descargado (lo que efectivamente entró);
+      // egreso y directo toman el peso cargado (el que figura siempre en
+      // la sección B de la CP, no depende de que ya se haya descargado).
       const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
       if (pesoKg) {
         setCantidad((pesoKg / 1000).toFixed(3));
@@ -113,8 +105,20 @@ export default function MovimientoForm({
         faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
       }
 
-      const fechaCp = tipoActual === "ingreso" ? datos.fechaDescarga : datos.fechaPartida;
-      if (fechaCp) setFecha(fechaCp);
+      // La fecha siempre es la de emisión de la CP (arriba a la derecha
+      // del documento), sea cual sea el tipo de movimiento.
+      if (datos.fecha) setFecha(datos.fecha);
+
+      if (tipoActual === "egreso" || tipoActual === "directo") {
+        if (datos.destino) setDestino(datos.destino);
+        else faltantes.push("destino");
+      }
+      if (tipoActual === "directo") {
+        if (datos.titular) setTitular(datos.titular);
+        else faltantes.push("titular");
+        if (datos.productor) setProductor(datos.productor);
+        else faltantes.push("productor");
+      }
 
       if (faltantes.length > 0) {
         setMensajeCp({
@@ -140,7 +144,7 @@ export default function MovimientoForm({
         ? await crearIngreso(formData)
         : tipo === "egreso"
         ? await crearEgreso(formData)
-        : await crearMovimiento(formData);
+        : await crearMovimientoDirecto(formData);
 
     setEnviando(false);
 
@@ -166,7 +170,7 @@ export default function MovimientoForm({
           disabled={leyendoCp}
           onChange={(e) => {
             const archivo = e.target.files?.[0];
-            if (archivo && (tipo === "ingreso" || tipo === "egreso")) {
+            if (archivo) {
               handleLeerCp(archivo, tipo);
             }
           }}
@@ -189,18 +193,22 @@ export default function MovimientoForm({
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex gap-2 mb-6">
-        {(["ingreso", "descarte", "egreso"] as const).map((t) => (
+        {([
+          { valor: "ingreso" as const, etiqueta: "Ingreso" },
+          { valor: "egreso" as const, etiqueta: "Egreso" },
+          { valor: "directo" as const, etiqueta: "Directo" },
+        ]).map((t) => (
           <button
-            key={t}
+            key={t.valor}
             type="button"
-            onClick={() => setTipo(t)}
-            className={`px-3 py-1.5 rounded text-sm capitalize ${
-              tipo === t
+            onClick={() => setTipo(t.valor)}
+            className={`px-3 py-1.5 rounded text-sm ${
+              tipo === t.valor
                 ? "bg-brand-navy text-white"
                 : "bg-gray-100 text-gray-700"
             }`}
           >
-            {t}
+            {t.etiqueta}
           </button>
         ))}
       </div>
@@ -385,6 +393,15 @@ export default function MovimientoForm({
               />
             </Campo>
 
+            <Campo label="Destino (a dónde va, según la CP)">
+              <input
+                name="destino"
+                className="input"
+                value={destino}
+                onChange={(e) => setDestino(e.target.value)}
+              />
+            </Campo>
+
             <Campo label="Cantidad (toneladas)">
               <input
                 name="cantidad"
@@ -411,31 +428,80 @@ export default function MovimientoForm({
           </>
         ) : (
           <>
-            <Campo label="Lote">
-              <select name="lote_id" required className="input">
+            <CampoCp />
+
+            <Campo label="Producto">
+              <select name="producto_id" required className="input">
                 <option value="">Seleccionar…</option>
-                {lotes.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {nombreDe(l.plantas)} · {nombreDe(l.productos)} ·{" "}
-                    {nombreDe(l.productores)}
-                    {l.numero_cp ? ` · CP ${l.numero_cp}` : ""} ({l.estado})
+                {productos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
                   </option>
                 ))}
               </select>
             </Campo>
 
-            <Campo label="Motivo">
-              <select
-                name="motivo"
-                value={motivoDescarte}
-                onChange={(e) => setMotivoDescarte(e.target.value)}
+            <Campo label="Titular de la CP">
+              <input
+                name="titular"
                 className="input"
-              >
-                <option value="procesamiento">
-                  Procesamiento (pasa de natural a procesado)
-                </option>
-                <option value="otro">Otro</option>
-              </select>
+                value={titular}
+                onChange={(e) => setTitular(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Productor / remitente">
+              <input
+                name="productor_texto"
+                className="input"
+                value={productor}
+                onChange={(e) => setProductor(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Destino">
+              <input
+                name="destino"
+                className="input"
+                value={destino}
+                onChange={(e) => setDestino(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Número de CP">
+              <input
+                name="numero_cp"
+                className="input"
+                value={numeroCp}
+                onChange={(e) => setNumeroCp(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Transportista">
+              <input
+                name="transportista"
+                className="input"
+                value={transportista}
+                onChange={(e) => setTransportista(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Chofer">
+              <input
+                name="chofer"
+                className="input"
+                value={chofer}
+                onChange={(e) => setChofer(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Patente">
+              <input
+                name="patente"
+                className="input"
+                value={patente}
+                onChange={(e) => setPatente(e.target.value)}
+              />
             </Campo>
 
             <Campo label="Cantidad (toneladas)">
@@ -446,6 +512,8 @@ export default function MovimientoForm({
                 min="0.001"
                 required
                 className="input"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
               />
             </Campo>
 
@@ -453,9 +521,10 @@ export default function MovimientoForm({
               <input
                 name="fecha"
                 type="date"
-                defaultValue={hoy}
                 required
                 className="input"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
               />
             </Campo>
           </>
