@@ -1,8 +1,10 @@
 // Lectura automática de Cartas de Porte Electrónica (CPE) de ARCA en PDF,
-// para autocompletar el formulario de ingreso/egreso. Solo se extraen datos
-// "neutros" (transporte, pesos, fechas, números de documento): nunca se
-// intenta adivinar planta, producto, productor ni si es ingreso o egreso,
-// porque esos campos los sigue eligiendo el operador a mano.
+// para autocompletar el formulario de ingreso/egreso/movimiento directo.
+// Se extraen datos "neutros" (transporte, pesos, fecha, números de
+// documento, y los intervinientes de la CP tal cual figuran): nunca se
+// intenta adivinar planta ni si es ingreso, egreso o directo, porque esos
+// campos los sigue eligiendo el operador a mano. Titular/Productor/Destino
+// se guardan solo a modo de registro/trazabilidad, no para inferir nada.
 //
 // El texto de un PDF no siempre sale en orden de lectura al extraerlo tal
 // cual (los renglones de una tabla pueden salir mezclados). Por eso
@@ -42,8 +44,10 @@ export type CpParseada = {
   patente: string | null;
   pesoNetoCargaKg: number | null; // sección B (origen): "kg cargados"
   pesoNetoDescargaKg: number | null; // sección G (destino): "kg descargados"
-  fechaPartida: string | null; // yyyy-mm-dd
-  fechaDescarga: string | null; // yyyy-mm-dd
+  fecha: string | null; // yyyy-mm-dd — fecha de emisión, arriba a la derecha del documento
+  titular: string | null; // Titular de la Carta de Porte (sección A)
+  productor: string | null; // Remitente Comercial Productor (sección A)
+  destino: string | null; // Destino (sección A) + localidad/provincia (sección D), a modo de registro
 };
 
 // Devuelve lo que sigue a una etiqueta en una línea, cortando si aparece
@@ -78,6 +82,15 @@ function sinCuit(valor: string | null): string | null {
   return valor.replace(/^\d{2}-?\d{8,11}-?\d?\s*-\s*/, "").trim() || valor;
 }
 
+// La localidad/provincia vienen en mayúsculas ("BERAZATEGUI"); para
+// mostrarlas junto al destino alcanza con una capitalización simple.
+function aTitulo(valor: string | null): string | null {
+  if (!valor) return null;
+  return valor
+    .toLowerCase()
+    .replace(/(^|\s)([a-záéíóúñ])/g, (_, esp, letra) => esp + letra.toUpperCase());
+}
+
 function aNumero(valor: string | null): number | null {
   if (!valor) return null;
   const limpio = valor.replace(/[^\d]/g, "");
@@ -98,14 +111,27 @@ function aFechaISO(valor: string | null): string | null {
 export function parseCp(lineas: string[]): CpParseada {
   const texto = lineas.join("\n");
 
+  const idxSeccionA = lineas.findIndex((l) => /^A\s*-\s*INTERVINIENTES/.test(l));
   const idxSeccionB = lineas.findIndex((l) => /^B\s*-\s*GRANO/.test(l));
   const idxSeccionC = lineas.findIndex((l) => /^C\s*-\s*PROCEDENCIA/.test(l));
+  const idxSeccionD = lineas.findIndex((l) => /^D\s*-\s*DESTINO/.test(l));
+  const idxSeccionE = lineas.findIndex((l) => /^E\s*-\s*DATOS DEL TRANSPORTE/.test(l));
   const idxSeccionG = lineas.findIndex((l) => /^G\s*-\s*DESCARGA/.test(l));
+  const seccionA = idxSeccionA >= 0 ? lineas.slice(idxSeccionA, idxSeccionB >= 0 ? idxSeccionB : undefined) : [];
   const seccionB = idxSeccionB >= 0 ? lineas.slice(idxSeccionB, idxSeccionC >= 0 ? idxSeccionC : undefined) : [];
+  const seccionD = idxSeccionD >= 0 ? lineas.slice(idxSeccionD, idxSeccionE >= 0 ? idxSeccionE : undefined) : [];
   const seccionG = idxSeccionG >= 0 ? lineas.slice(idxSeccionG) : [];
 
   const numeroCpeMatch = texto.match(/\b(\d{5}-\d{8})\b/);
   const ctgMatch = texto.match(/CTG:\s*(\d+)/i);
+
+  // Fecha de emisión: siempre arriba a la derecha del documento, en el
+  // mismo renglón que el título "Carta de Porte Electrónica". Es la única
+  // fecha que siempre está presente (a diferencia de "Partida" o "Fecha
+  // Descarga", que pueden faltar), así que es la que se usa siempre,
+  // sea ingreso, egreso o movimiento directo.
+  const lineaEncabezado = primeraLineaConEtiqueta(lineas, /Carta de Porte Electr[oó]nica/i);
+  const fecha = aFechaISO(lineaEncabezado ? valorTrasEtiqueta(lineaEncabezado, /Fecha\s*:/i) : null);
 
   const lineaChofer = primeraLineaConEtiqueta(lineas, /Chofer\s*:/i);
   const chofer = sinCuit(lineaChofer ? valorTrasEtiqueta(lineaChofer, /Chofer\s*:/i) : null);
@@ -117,6 +143,35 @@ export function parseCp(lineas: string[]): CpParseada {
 
   const lineaDominios = primeraLineaConEtiqueta(lineas, /Dominios\s*:/i);
   const patente = lineaDominios ? valorTrasEtiqueta(lineaDominios, /Dominios\s*:/i) : null;
+
+  const lineaTitular = seccionA.find((l) => /Titular Carta de Porte\s*:/i.test(l));
+  const titular = sinCuit(
+    lineaTitular ? valorTrasEtiqueta(lineaTitular, /Titular Carta de Porte\s*:/i) : null
+  );
+
+  const lineaProductor = seccionA.find((l) => /Remitente Comercial Productor\s*:/i.test(l));
+  const productor = sinCuit(
+    lineaProductor ? valorTrasEtiqueta(lineaProductor, /Remitente Comercial Productor\s*:/i) : null
+  );
+
+  const lineaDestino = seccionA.find((l) => /Destino\s*:/i.test(l));
+  const destinoEntidad = sinCuit(lineaDestino ? valorTrasEtiqueta(lineaDestino, /Destino\s*:/i) : null);
+
+  const lineaLocalidadDestino = seccionD.find((l) => /Localidad\s*:/i.test(l));
+  const localidadDestino = aTitulo(
+    lineaLocalidadDestino
+      ? valorTrasEtiqueta(lineaLocalidadDestino, /Localidad\s*:/i, [/Provincia\s*:?/i])
+      : null
+  );
+  const provinciaDestino = aTitulo(
+    lineaLocalidadDestino ? valorTrasEtiqueta(lineaLocalidadDestino, /Provincia\s*:/i) : null
+  );
+  const lugarDestino = [localidadDestino, provinciaDestino].filter(Boolean).join(", ");
+  const destino = destinoEntidad
+    ? lugarDestino
+      ? `${destinoEntidad} (${lugarDestino})`
+      : destinoEntidad
+    : null;
 
   const lineaPesoCarga = seccionB.find((l) => /Peso Neto\b(?!\s*\(kg\))/i.test(l));
   const pesoNetoCargaKg = aNumero(
@@ -130,18 +185,6 @@ export function parseCp(lineas: string[]): CpParseada {
       : null
   );
 
-  const lineaPartida = primeraLineaConEtiqueta(lineas, /Partida\s*:/i);
-  const fechaPartida = aFechaISO(
-    lineaPartida ? valorTrasEtiqueta(lineaPartida, /Partida\s*:/i, [/Kms\.?/i]) : null
-  );
-
-  const lineaFechaDescarga = seccionG.find((l) => /Fecha Descarga\s*:/i.test(l));
-  const fechaDescarga = aFechaISO(
-    lineaFechaDescarga
-      ? valorTrasEtiqueta(lineaFechaDescarga, /Fecha Descarga\s*:/i, [/Peso Tara/i, /Localidad\s*:?/i])
-      : null
-  );
-
   return {
     numeroCpe: numeroCpeMatch ? numeroCpeMatch[1] : null,
     ctg: ctgMatch ? ctgMatch[1] : null,
@@ -150,7 +193,9 @@ export function parseCp(lineas: string[]): CpParseada {
     patente,
     pesoNetoCargaKg,
     pesoNetoDescargaKg,
-    fechaPartida,
-    fechaDescarga,
+    fecha,
+    titular,
+    productor,
+    destino,
   };
 }
