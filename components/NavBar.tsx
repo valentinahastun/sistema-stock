@@ -38,6 +38,9 @@ export default async function NavBar() {
                 <Link href="/egresos" className="hover:text-brand-green">
                   Egresos
                 </Link>
+                <Link href="/directos" className="hover:text-brand-green">
+                  Directos
+                </Link>
               </>
             )}
             {perfil.rol === "admin" && (
