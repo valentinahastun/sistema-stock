@@ -97,6 +97,8 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
     const productor_texto = (formData.get("productor_texto") as string) || null;
     const destino = (formData.get("destino") as string) || null;
     const cantidad = Number(formData.get("cantidad"));
+    const cantidadDescargadaRaw = formData.get("cantidad_descargada") as string;
+    const cantidad_descargada = cantidadDescargadaRaw ? Number(cantidadDescargadaRaw) : null;
     const fecha = formData.get("fecha") as string;
     const observaciones = (formData.get("observaciones") as string) || null;
 
@@ -115,6 +117,7 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
       productor_texto,
       destino,
       cantidad,
+      cantidad_descargada,
       fecha,
       observaciones,
     });
