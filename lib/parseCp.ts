@@ -48,6 +48,7 @@ export type CpParseada = {
   titular: string | null; // Titular de la Carta de Porte (sección A)
   productor: string | null; // Remitente Comercial Productor (sección A)
   destino: string | null; // Destino (sección A) + localidad/provincia (sección D), a modo de registro
+  granoTipo: string | null; // "Grano / Poroto Tipo" tal cual figura en la CP (sección B)
 };
 
 // Devuelve lo que sigue a una etiqueta en una línea, cortando si aparece
@@ -173,6 +174,11 @@ export function parseCp(lineas: string[]): CpParseada {
       : destinoEntidad
     : null;
 
+  const lineaGrano = seccionB.find((l) => /Grano\s*\/\s*Poroto Tipo\s*:/i.test(l));
+  const granoTipo = lineaGrano
+    ? valorTrasEtiqueta(lineaGrano, /Grano\s*\/\s*Poroto Tipo\s*:/i, [/Campa[ñn]a\s*:?/i])
+    : null;
+
   const lineaPesoCarga = seccionB.find((l) => /Peso Neto\b(?!\s*\(kg\))/i.test(l));
   const pesoNetoCargaKg = aNumero(
     lineaPesoCarga ? valorTrasEtiqueta(lineaPesoCarga, /Peso Neto\b(?!\s*\(kg\))/i) : null
@@ -197,5 +203,6 @@ export function parseCp(lineas: string[]): CpParseada {
     titular,
     productor,
     destino,
+    granoTipo,
   };
 }
