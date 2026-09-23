@@ -17,9 +17,46 @@ type DatosCp = {
   titular: string | null;
   productor: string | null;
   destino: string | null;
+  granoTipo: string | null;
 };
 
 type Tipo = "ingreso" | "egreso" | "directo";
+
+// Para el movimiento Directo, el producto (que en la CP viene como texto
+// libre en "Grano / Poroto Tipo") se intenta asociar con las reglas que
+// confirmó el usuario. Reglas en orden: la primera que matchea gana. Las
+// variedades con nombre propio en la CP (Alubia, Negro, Cranberry,
+// Garbanzo, Mung) matchean por ese nombre; Adzuki no tiene nombre propio
+// en la CP (la describen como "distinto" del oval blanco), así que es el
+// catch-all: cualquier "poroto" que no haya matcheado antes. Colorado es
+// un caso aparte: la CP no distingue Dark de Light, así que nunca se
+// autocompleta (lo elige la persona a mano), aunque diga "poroto". El
+// campo queda siempre editable para corregir cualquiera de estos casos
+// antes de guardar.
+const REGLAS_PRODUCTO_DIRECTO: { patron: RegExp; nombreProducto: string }[] = [
+  { patron: /alubia/i, nombreProducto: "Poroto Alubia" },
+  { patron: /negro/i, nombreProducto: "Poroto Negro" },
+  { patron: /cranberry/i, nombreProducto: "Poroto Cranberry" },
+  { patron: /garbanzo/i, nombreProducto: "Garbanzo" },
+  { patron: /mung/i, nombreProducto: "Poroto Mungo" },
+  { patron: /poroto/i, nombreProducto: "Poroto Adzuki" },
+];
+
+function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): string | null {
+  if (!granoTipo) return null;
+  // Colorado Dark vs Light no se distingue en el texto de la CP: mejor no
+  // adivinar y que se elija a mano, en vez de arriesgar el catch-all de Adzuki.
+  if (/colorado/i.test(granoTipo)) return null;
+  for (const regla of REGLAS_PRODUCTO_DIRECTO) {
+    if (regla.patron.test(granoTipo)) {
+      const match = productos.find(
+        (p) => p.nombre.trim().toLowerCase() === regla.nombreProducto.toLowerCase()
+      );
+      if (match) return match.id;
+    }
+  }
+  return null;
+}
 
 export default function MovimientoForm({
   plantas,
@@ -46,10 +83,12 @@ export default function MovimientoForm({
   const [chofer, setChofer] = useState("");
   const [patente, setPatente] = useState("");
   const [cantidad, setCantidad] = useState("");
+  const [cantidadDescargada, setCantidadDescargada] = useState("");
   const [fecha, setFecha] = useState(hoy);
   const [destino, setDestino] = useState("");
   const [titular, setTitular] = useState("");
   const [productor, setProductor] = useState("");
+  const [productoIdDirecto, setProductoIdDirecto] = useState("");
   const [leyendoCp, setLeyendoCp] = useState(false);
   const [mensajeCp, setMensajeCp] = useState<
     { tipo: "ok" | "error"; texto: string } | null
@@ -62,10 +101,12 @@ export default function MovimientoForm({
     setChofer("");
     setPatente("");
     setCantidad("");
+    setCantidadDescargada("");
     setFecha(hoy);
     setDestino("");
     setTitular("");
     setProductor("");
+    setProductoIdDirecto("");
     setMensajeCp(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
   }
@@ -96,13 +137,33 @@ export default function MovimientoForm({
       else faltantes.push("patente");
 
       // Ingreso toma el peso descargado (lo que efectivamente entró);
-      // egreso y directo toman el peso cargado (el que figura siempre en
-      // la sección B de la CP, no depende de que ya se haya descargado).
-      const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
-      if (pesoKg) {
-        setCantidad((pesoKg / 1000).toFixed(3));
+      // egreso toma el peso cargado (el que figura siempre en la sección B
+      // de la CP, no depende de que ya se haya descargado). Directo
+      // muestra los dos, para poder ver si hubo diferencia en el camino
+      // aunque la mercadería nunca haya pasado por el depósito propio.
+      if (tipoActual === "directo") {
+        if (datos.pesoNetoCargaKg) {
+          setCantidad((datos.pesoNetoCargaKg / 1000).toFixed(3));
+        } else {
+          faltantes.push("peso neto de carga");
+        }
+        if (datos.pesoNetoDescargaKg) {
+          setCantidadDescargada((datos.pesoNetoDescargaKg / 1000).toFixed(3));
+        }
+
+        const productoDetectado = detectarProductoId(datos.granoTipo, productos);
+        if (productoDetectado) {
+          setProductoIdDirecto(productoDetectado);
+        } else {
+          faltantes.push("producto (no se pudo asociar, elegilo a mano)");
+        }
       } else {
-        faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
+        const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
+        if (pesoKg) {
+          setCantidad((pesoKg / 1000).toFixed(3));
+        } else {
+          faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
+        }
       }
 
       // La fecha siempre es la de emisión de la CP (arriba a la derecha
@@ -431,7 +492,13 @@ export default function MovimientoForm({
             <CampoCp />
 
             <Campo label="Producto">
-              <select name="producto_id" required className="input">
+              <select
+                name="producto_id"
+                required
+                className="input"
+                value={productoIdDirecto}
+                onChange={(e) => setProductoIdDirecto(e.target.value)}
+              >
                 <option value="">Seleccionar…</option>
                 {productos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -504,7 +571,7 @@ export default function MovimientoForm({
               />
             </Campo>
 
-            <Campo label="Cantidad (toneladas)">
+            <Campo label="Cantidad cargada (toneladas)">
               <input
                 name="cantidad"
                 type="number"
@@ -514,6 +581,18 @@ export default function MovimientoForm({
                 className="input"
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
+              />
+            </Campo>
+
+            <Campo label="Cantidad descargada (toneladas, opcional)">
+              <input
+                name="cantidad_descargada"
+                type="number"
+                step="0.001"
+                min="0.001"
+                className="input"
+                value={cantidadDescargada}
+                onChange={(e) => setCantidadDescargada(e.target.value)}
               />
             </Campo>
 
