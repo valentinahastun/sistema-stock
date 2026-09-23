@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { crearIngreso, crearMovimientoDirecto, crearEgreso } from "@/app/movimientos/actions";
 
 type Catalogo = { id: string; nombre: string };
@@ -89,6 +89,11 @@ export default function MovimientoForm({
   const [titular, setTitular] = useState("");
   const [productor, setProductor] = useState("");
   const [productoIdDirecto, setProductoIdDirecto] = useState("");
+  // Últimos datos leídos de una CP, para poder recalcular los campos que
+  // dependen del tipo (cantidad, fecha, destino, producto...) cuando la
+  // persona cambia de pestaña después de leerla, sin tener que volver a
+  // subir el mismo PDF.
+  const [datosCp, setDatosCp] = useState<DatosCp | null>(null);
   const [leyendoCp, setLeyendoCp] = useState(false);
   const [mensajeCp, setMensajeCp] = useState<
     { tipo: "ok" | "error"; texto: string } | null
@@ -107,9 +112,96 @@ export default function MovimientoForm({
     setTitular("");
     setProductor("");
     setProductoIdDirecto("");
+    setDatosCp(null);
     setMensajeCp(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
   }
+
+  // Aplica los datos ya leídos de una CP a los campos del formulario,
+  // según el tipo de movimiento actual. Se llama tanto al leer el PDF
+  // como cada vez que se cambia de pestaña (Ingreso/Egreso/Directo) con
+  // una CP ya leída, para no tener que volver a subir el mismo archivo:
+  // el peso, la fecha y el resto dependen del tipo, así que hay que
+  // recalcularlos.
+  function aplicarDatosCp(datos: DatosCp, tipoActual: Tipo) {
+    const faltantes: string[] = [];
+
+    if (datos.numeroCpe) setNumeroCp(datos.numeroCpe);
+    if (datos.transportista) setTransportista(datos.transportista);
+    else faltantes.push("transportista");
+    if (datos.chofer) setChofer(datos.chofer);
+    else faltantes.push("chofer");
+    if (datos.patente) setPatente(datos.patente);
+    else faltantes.push("patente");
+
+    // Ingreso toma el peso descargado (lo que efectivamente entró);
+    // egreso toma el peso cargado (el que figura siempre en la sección B
+    // de la CP, no depende de que ya se haya descargado). Directo
+    // muestra los dos, para poder ver si hubo diferencia en el camino
+    // aunque la mercadería nunca haya pasado por el depósito propio.
+    if (tipoActual === "directo") {
+      if (datos.pesoNetoCargaKg) {
+        setCantidad((datos.pesoNetoCargaKg / 1000).toFixed(3));
+      } else {
+        faltantes.push("peso neto de carga");
+      }
+      setCantidadDescargada(
+        datos.pesoNetoDescargaKg ? (datos.pesoNetoDescargaKg / 1000).toFixed(3) : ""
+      );
+
+      const productoDetectado = detectarProductoId(datos.granoTipo, productos);
+      if (productoDetectado) {
+        setProductoIdDirecto(productoDetectado);
+      } else {
+        setProductoIdDirecto("");
+        faltantes.push("producto (no se pudo asociar, elegilo a mano)");
+      }
+    } else {
+      const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
+      if (pesoKg) {
+        setCantidad((pesoKg / 1000).toFixed(3));
+      } else {
+        setCantidad("");
+        faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
+      }
+    }
+
+    // La fecha siempre es la de emisión de la CP (arriba a la derecha
+    // del documento), sea cual sea el tipo de movimiento.
+    if (datos.fecha) setFecha(datos.fecha);
+
+    if (tipoActual === "egreso" || tipoActual === "directo") {
+      if (datos.destino) setDestino(datos.destino);
+      else faltantes.push("destino");
+    } else {
+      setDestino("");
+    }
+    if (tipoActual === "directo") {
+      if (datos.titular) setTitular(datos.titular);
+      else faltantes.push("titular");
+      if (datos.productor) setProductor(datos.productor);
+      else faltantes.push("productor");
+    } else {
+      setTitular("");
+      setProductor("");
+    }
+
+    if (faltantes.length > 0) {
+      setMensajeCp({
+        tipo: "error",
+        texto: `Se completó lo que se pudo leer, pero faltó en el PDF: ${faltantes.join(", ")}. Completalo a mano.`,
+      });
+    } else {
+      setMensajeCp({ tipo: "ok", texto: "Datos de la CP cargados. Revisalos antes de guardar." });
+    }
+  }
+
+  // Si ya hay una CP leída y se cambia de pestaña, recalcula los campos
+  // para el tipo nuevo sin pedir que se vuelva a subir el PDF.
+  useEffect(() => {
+    if (datosCp) aplicarDatosCp(datosCp, tipo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo]);
 
   async function handleLeerCp(archivo: File, tipoActual: Tipo) {
     setLeyendoCp(true);
@@ -126,69 +218,8 @@ export default function MovimientoForm({
       }
 
       const datos = json.datos as DatosCp;
-      const faltantes: string[] = [];
-
-      if (datos.numeroCpe) setNumeroCp(datos.numeroCpe);
-      if (datos.transportista) setTransportista(datos.transportista);
-      else faltantes.push("transportista");
-      if (datos.chofer) setChofer(datos.chofer);
-      else faltantes.push("chofer");
-      if (datos.patente) setPatente(datos.patente);
-      else faltantes.push("patente");
-
-      // Ingreso toma el peso descargado (lo que efectivamente entró);
-      // egreso toma el peso cargado (el que figura siempre en la sección B
-      // de la CP, no depende de que ya se haya descargado). Directo
-      // muestra los dos, para poder ver si hubo diferencia en el camino
-      // aunque la mercadería nunca haya pasado por el depósito propio.
-      if (tipoActual === "directo") {
-        if (datos.pesoNetoCargaKg) {
-          setCantidad((datos.pesoNetoCargaKg / 1000).toFixed(3));
-        } else {
-          faltantes.push("peso neto de carga");
-        }
-        if (datos.pesoNetoDescargaKg) {
-          setCantidadDescargada((datos.pesoNetoDescargaKg / 1000).toFixed(3));
-        }
-
-        const productoDetectado = detectarProductoId(datos.granoTipo, productos);
-        if (productoDetectado) {
-          setProductoIdDirecto(productoDetectado);
-        } else {
-          faltantes.push("producto (no se pudo asociar, elegilo a mano)");
-        }
-      } else {
-        const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
-        if (pesoKg) {
-          setCantidad((pesoKg / 1000).toFixed(3));
-        } else {
-          faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
-        }
-      }
-
-      // La fecha siempre es la de emisión de la CP (arriba a la derecha
-      // del documento), sea cual sea el tipo de movimiento.
-      if (datos.fecha) setFecha(datos.fecha);
-
-      if (tipoActual === "egreso" || tipoActual === "directo") {
-        if (datos.destino) setDestino(datos.destino);
-        else faltantes.push("destino");
-      }
-      if (tipoActual === "directo") {
-        if (datos.titular) setTitular(datos.titular);
-        else faltantes.push("titular");
-        if (datos.productor) setProductor(datos.productor);
-        else faltantes.push("productor");
-      }
-
-      if (faltantes.length > 0) {
-        setMensajeCp({
-          tipo: "error",
-          texto: `Se completó lo que se pudo leer, pero faltó en el PDF: ${faltantes.join(", ")}. Completalo a mano.`,
-        });
-      } else {
-        setMensajeCp({ tipo: "ok", texto: "Datos de la CP cargados. Revisalos antes de guardar." });
-      }
+      setDatosCp(datos);
+      aplicarDatosCp(datos, tipoActual);
     } catch (e) {
       setMensajeCp({ tipo: "error", texto: `No se pudo leer el PDF: ${(e as Error).message}` });
     } finally {
@@ -653,3 +684,4 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
