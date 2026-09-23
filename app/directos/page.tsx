@@ -21,7 +21,7 @@ export default async function DirectosPage() {
   const { data: movimientos } = await supabase
     .from("movimientos_stock")
     .select(
-      "id, cantidad, fecha, observaciones, numero_cp, transportista, chofer, patente, titular, productor_texto, destino, productos(nombre)"
+      "id, cantidad, cantidad_descargada, fecha, observaciones, numero_cp, transportista, chofer, patente, titular, productor_texto, destino, productos(nombre)"
     )
     .eq("tipo", "directo")
     .order("fecha", { ascending: false })
@@ -30,6 +30,7 @@ export default async function DirectosPage() {
   type Fila = {
     id: string;
     cantidad: number;
+    cantidad_descargada: number | null;
     fecha: string;
     observaciones: string | null;
     numero_cp: string | null;
@@ -69,7 +70,8 @@ export default async function DirectosPage() {
               <th className="px-4 py-2">Titular</th>
               <th className="px-4 py-2">Productor / remitente</th>
               <th className="px-4 py-2">Destino</th>
-              <th className="px-4 py-2 text-right">Cantidad (tn)</th>
+              <th className="px-4 py-2 text-right">Cargado (tn)</th>
+              <th className="px-4 py-2 text-right">Descargado (tn)</th>
               <th className="px-4 py-2">Observaciones</th>
               {esAdmin && <th className="px-4 py-2"></th>}
             </tr>
@@ -94,6 +96,9 @@ export default async function DirectosPage() {
                 <td className="px-4 py-2 text-right font-medium">
                   {Number(f.cantidad).toFixed(2)}
                 </td>
+                <td className="px-4 py-2 text-right text-gray-600">
+                  {f.cantidad_descargada != null ? Number(f.cantidad_descargada).toFixed(2) : "—"}
+                </td>
                 <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
                 {esAdmin && (
                   <td className="px-4 py-2">
@@ -104,7 +109,7 @@ export default async function DirectosPage() {
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 9 : 8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 10 : 9} className="px-4 py-6 text-center text-gray-400">
                   No hay movimientos directos cargados todavía.
                 </td>
               </tr>
