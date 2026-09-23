@@ -88,7 +88,7 @@ export default function MovimientoForm({
   const [destino, setDestino] = useState("");
   const [titular, setTitular] = useState("");
   const [productor, setProductor] = useState("");
-  const [productoIdDirecto, setProductoIdDirecto] = useState("");
+  const [productoId, setProductoId] = useState("");
   // Últimos datos leídos de una CP, para poder recalcular los campos que
   // dependen del tipo (cantidad, fecha, destino, producto...) cuando la
   // persona cambia de pestaña después de leerla, sin tener que volver a
@@ -111,7 +111,7 @@ export default function MovimientoForm({
     setDestino("");
     setTitular("");
     setProductor("");
-    setProductoIdDirecto("");
+    setProductoId("");
     setDatosCp(null);
     setMensajeCp(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
@@ -125,6 +125,18 @@ export default function MovimientoForm({
   // recalcularlos.
   function aplicarDatosCp(datos: DatosCp, tipoActual: Tipo) {
     const faltantes: string[] = [];
+
+    // El producto se intenta asociar leyendo el grano/tipo de poroto de la
+    // CP, en los tres tipos de movimiento (antes solo se hacía en
+    // Directo). Sigue siendo un desplegable editable: si no matchea bien,
+    // se elige a mano antes de guardar.
+    const productoDetectado = detectarProductoId(datos.granoTipo, productos);
+    if (productoDetectado) {
+      setProductoId(productoDetectado);
+    } else {
+      setProductoId("");
+      faltantes.push("producto (no se pudo asociar, elegilo a mano)");
+    }
 
     if (datos.numeroCpe) setNumeroCp(datos.numeroCpe);
     if (datos.transportista) setTransportista(datos.transportista);
@@ -148,14 +160,6 @@ export default function MovimientoForm({
       setCantidadDescargada(
         datos.pesoNetoDescargaKg ? (datos.pesoNetoDescargaKg / 1000).toFixed(3) : ""
       );
-
-      const productoDetectado = detectarProductoId(datos.granoTipo, productos);
-      if (productoDetectado) {
-        setProductoIdDirecto(productoDetectado);
-      } else {
-        setProductoIdDirecto("");
-        faltantes.push("producto (no se pudo asociar, elegilo a mano)");
-      }
     } else {
       const pesoKg = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg : datos.pesoNetoCargaKg;
       if (pesoKg) {
@@ -324,7 +328,13 @@ export default function MovimientoForm({
             </Campo>
 
             <Campo label="Producto">
-              <select name="producto_id" required className="input">
+              <select
+                name="producto_id"
+                required
+                className="input"
+                value={productoId}
+                onChange={(e) => setProductoId(e.target.value)}
+              >
                 <option value="">Seleccionar…</option>
                 {productos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -428,7 +438,13 @@ export default function MovimientoForm({
             </Campo>
 
             <Campo label="Producto">
-              <select name="producto_id" required className="input">
+              <select
+                name="producto_id"
+                required
+                className="input"
+                value={productoId}
+                onChange={(e) => setProductoId(e.target.value)}
+              >
                 <option value="">Seleccionar…</option>
                 {productos.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -527,8 +543,8 @@ export default function MovimientoForm({
                 name="producto_id"
                 required
                 className="input"
-                value={productoIdDirecto}
-                onChange={(e) => setProductoIdDirecto(e.target.value)}
+                value={productoId}
+                onChange={(e) => setProductoId(e.target.value)}
               >
                 <option value="">Seleccionar…</option>
                 {productos.map((p) => (
@@ -684,4 +700,3 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
