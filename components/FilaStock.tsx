@@ -251,6 +251,12 @@ function DetalleLotes({
   );
 }
 
+// El usuario puede cargar la caída de dos formas, la que le resulte más
+// cómoda en cada caso: como % del stock actual del lote, o directamente
+// en toneladas de descarte (cuando ya sabe el número real que salió del
+// proceso). "modo" indica cuál de las dos se está usando; la otra se
+// muestra en gris, calculada a partir de esa, y si el usuario la toca
+// pasa a ser ella la fuente.
 function FilaLote({
   lote,
   puedeEditar,
@@ -259,33 +265,75 @@ function FilaLote({
   puedeEditar: boolean;
 }) {
   const router = useRouter();
-  const [pct, setPct] = useState(
+  const [modo, setModo] = useState<"pct" | "tn" | null>(
+    lote.caida_pct_estimada !== null ? "pct" : null
+  );
+  const [pctRaw, setPctRaw] = useState(
     lote.caida_pct_estimada !== null ? String(lote.caida_pct_estimada) : ""
   );
+  const [tnRaw, setTnRaw] = useState("");
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pctNum = pct === "" ? null : Number(pct);
-  const valido = pctNum !== null && !Number.isNaN(pctNum) && pctNum > 0 && pctNum <= 100;
-  const descarteEstimado = valido ? (lote.stock_actual_tn * (pctNum as number)) / 100 : null;
+  function onChangePct(v: string) {
+    setModo(v === "" ? null : "pct");
+    setPctRaw(v);
+    setTnRaw("");
+  }
+
+  function onChangeTn(v: string) {
+    setModo(v === "" ? null : "tn");
+    setTnRaw(v);
+    setPctRaw("");
+  }
+
+  const pctNum = modo === "pct" && pctRaw !== "" ? Number(pctRaw) : null;
+  const pctValido = pctNum !== null && !Number.isNaN(pctNum) && pctNum > 0 && pctNum <= 100;
+
+  const tnNum = modo === "tn" && tnRaw !== "" ? Number(tnRaw) : null;
+  const tnValido =
+    tnNum !== null && !Number.isNaN(tnNum) && tnNum > 0 && tnNum <= lote.stock_actual_tn;
+
+  const valido = modo === "pct" ? pctValido : modo === "tn" ? tnValido : false;
+
+  const descarteEstimado =
+    modo === "pct" && pctValido
+      ? (lote.stock_actual_tn * (pctNum as number)) / 100
+      : modo === "tn" && tnValido
+      ? (tnNum as number)
+      : null;
   const exportableEstimado =
-    valido && descarteEstimado !== null ? lote.stock_actual_tn - descarteEstimado : null;
+    descarteEstimado !== null ? lote.stock_actual_tn - descarteEstimado : null;
+
+  // Lo que se muestra en cada campo: el valor tipeado si es ese el modo
+  // activo, o el equivalente calculado (gris) a partir del otro campo.
+  const pctMostrado =
+    modo === "tn" && tnValido
+      ? (((tnNum as number) / lote.stock_actual_tn) * 100).toFixed(2)
+      : pctRaw;
+  const tnMostrado =
+    modo === "pct" && pctValido ? (descarteEstimado as number).toFixed(2) : tnRaw;
 
   async function confirmar() {
     if (!valido) {
-      setError("Tiene que ser un número mayor a 0 y hasta 100.");
+      setError("Ingresá un % (0 a 100) o las toneladas de descarte.");
       return;
     }
-    const confirmado = window.confirm(
-      `Se va a cargar un descarte real de ${descarteEstimado?.toFixed(
-        2
-      )} tn en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`
-    );
+    const mensaje =
+      modo === "pct"
+        ? `Se va a cargar un descarte real de ${descarteEstimado?.toFixed(
+            2
+          )} tn (${pctRaw}%) en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`
+        : `Se va a cargar un descarte real de ${tnRaw} tn en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`;
+    const confirmado = window.confirm(mensaje);
     if (!confirmado) return;
 
     setConfirmando(true);
     setError(null);
-    const resultado = await confirmarCaidaEstimada(lote.lote_id, pct);
+    const resultado = await confirmarCaidaEstimada(
+      lote.lote_id,
+      modo === "pct" ? { modo: "pct", valor: pctRaw } : { modo: "tn", valor: tnRaw }
+    );
     setConfirmando(false);
     if (resultado.ok) {
       router.refresh();
@@ -295,6 +343,7 @@ function FilaLote({
   }
 
   const esNatural = lote.estado === "natural";
+  const puedeCargar = esNatural && puedeEditar;
 
   return (
     <tr className="border-t border-gray-200 align-top">
@@ -304,15 +353,17 @@ function FilaLote({
       <td className="px-2 py-1.5 capitalize">{lote.estado}</td>
       <td className="px-2 py-1.5 text-right">{lote.stock_actual_tn.toFixed(2)}</td>
       <td className="px-2 py-1.5 text-right">
-        {esNatural && puedeEditar ? (
+        {puedeCargar ? (
           <input
             type="number"
             min="0"
             max="100"
             step="0.1"
-            value={pct}
-            onChange={(e) => setPct(e.target.value)}
-            className="w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs"
+            value={pctMostrado}
+            onChange={(e) => onChangePct(e.target.value)}
+            className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
+              modo === "tn" && tnValido ? "text-gray-400" : ""
+            }`}
             placeholder="—"
           />
         ) : esNatural ? (
@@ -322,13 +373,30 @@ function FilaLote({
         )}
       </td>
       <td className="px-2 py-1.5 text-right">
-        {descarteEstimado !== null ? descarteEstimado.toFixed(2) : "—"}
+        {puedeCargar ? (
+          <input
+            type="number"
+            min="0"
+            max={lote.stock_actual_tn}
+            step="0.01"
+            value={tnMostrado}
+            onChange={(e) => onChangeTn(e.target.value)}
+            className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
+              modo === "pct" && pctValido ? "text-gray-400" : ""
+            }`}
+            placeholder="—"
+          />
+        ) : descarteEstimado !== null ? (
+          descarteEstimado.toFixed(2)
+        ) : (
+          "—"
+        )}
       </td>
       <td className="px-2 py-1.5 text-right">
         {exportableEstimado !== null ? exportableEstimado.toFixed(2) : "—"}
       </td>
       <td className="px-2 py-1.5 text-right">
-        {esNatural && puedeEditar && (
+        {puedeCargar && (
           <div className="flex flex-col items-end gap-0.5">
             <button
               type="button"
