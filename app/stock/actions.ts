@@ -43,6 +43,14 @@ async function obtenerOCrearProductoDescarte(
   return descarteId;
 }
 
+// Cómo se cargó la caída estimada: como % del stock actual del lote, o
+// directamente en toneladas de descarte (cuando ya se sabe el número
+// real que salió del proceso, es más simple tipearlo directo que
+// convertirlo a %).
+export type CaidaEstimadaInput =
+  | { modo: "pct"; valor: string }
+  | { modo: "tn"; valor: string };
+
 // Confirma la caída estimada de un lote "natural": genera el descarte
 // real sobre ese lote (lo que lo marca como "procesado", igual que un
 // descarte manual por procesamiento) y da de alta, como stock propio,
@@ -50,17 +58,12 @@ async function obtenerOCrearProductoDescarte(
 // Negro), por la cantidad calculada.
 export async function confirmarCaidaEstimada(
   loteId: string,
-  pctTexto: string
+  input: CaidaEstimadaInput
 ): Promise<Resultado> {
   try {
     const perfil = await getPerfilActual();
     if (!perfil || perfil.rol !== "admin") {
       return { ok: false, error: "Solo el usuario administrador puede confirmarlo." };
-    }
-
-    const pct = Number(pctTexto);
-    if (pctTexto === "" || Number.isNaN(pct) || pct <= 0 || pct > 100) {
-      return { ok: false, error: "Tiene que ser un número mayor a 0 y hasta 100." };
     }
 
     const supabase = createClient();
@@ -92,11 +95,35 @@ export async function confirmarCaidaEstimada(
     }
 
     const stockActual = Number(stockLote.stock_actual_tn);
-    const bruto = (stockActual * pct) / 100;
-    const descarteTn = Math.min(Math.round(bruto * 1000) / 1000, stockActual);
+
+    let descarteTn: number;
+    let pctParaGuardar: number;
+
+    if (input.modo === "pct") {
+      const pct = Number(input.valor);
+      if (input.valor === "" || Number.isNaN(pct) || pct <= 0 || pct > 100) {
+        return { ok: false, error: "Tiene que ser un número mayor a 0 y hasta 100." };
+      }
+      const bruto = (stockActual * pct) / 100;
+      descarteTn = Math.min(Math.round(bruto * 1000) / 1000, stockActual);
+      pctParaGuardar = pct;
+    } else {
+      const tn = Number(input.valor);
+      if (input.valor === "" || Number.isNaN(tn) || tn <= 0) {
+        return { ok: false, error: "Tiene que ser un número mayor a 0." };
+      }
+      if (tn > stockActual) {
+        return {
+          ok: false,
+          error: `No puede superar el stock actual del lote (${stockActual.toFixed(2)} tn).`,
+        };
+      }
+      descarteTn = Math.round(tn * 1000) / 1000;
+      pctParaGuardar = Math.round((descarteTn / stockActual) * 10000) / 100;
+    }
 
     if (descarteTn <= 0) {
-      return { ok: false, error: "El % ingresado no genera ningún descarte." };
+      return { ok: false, error: "Eso no genera ningún descarte." };
     }
 
     const descarteProductoId = await obtenerOCrearProductoDescarte(supabase, {
@@ -130,12 +157,17 @@ export async function confirmarCaidaEstimada(
       };
     }
 
+    const origenTexto =
+      input.modo === "pct"
+        ? `caída estimada (${input.valor}%)`
+        : `descarte cargado directo (${descarteTn.toFixed(2)} tn)`;
+
     const { error: errorIngresoDescarte } = await supabase.from("movimientos_stock").insert({
       lote_id: loteDescarte.id,
       tipo: "ingreso",
       cantidad: descarteTn,
       fecha: hoy,
-      observaciones: `Generado automáticamente por caída estimada (${pct}%) del lote de ${productoOriginal.nombre}.`,
+      observaciones: `Generado automáticamente por ${origenTexto} del lote de ${productoOriginal.nombre}.`,
     });
     if (errorIngresoDescarte) return { ok: false, error: errorIngresoDescarte.message };
 
@@ -150,12 +182,13 @@ export async function confirmarCaidaEstimada(
       fecha: hoy,
       motivo: "procesamiento",
       descarte_generado_lote_id: loteDescarte.id,
-      observaciones: `Generado automáticamente por % de caída estimada (${pct}%).`,
+      observaciones: `Generado automáticamente por ${origenTexto}.`,
     });
     if (errorDescarte) return { ok: false, error: errorDescarte.message };
 
-    // Queda guardado el % usado, a modo de registro en el lote original.
-    await supabase.from("lotes").update({ caida_pct_estimada: pct }).eq("id", loteId);
+    // Queda guardado el % (cargado directo, o el equivalente calculado si
+    // se cargó en tn) a modo de registro en el lote original.
+    await supabase.from("lotes").update({ caida_pct_estimada: pctParaGuardar }).eq("id", loteId);
 
     revalidatePath("/stock");
     revalidatePath("/movimientos");
