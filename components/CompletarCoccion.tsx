@@ -5,20 +5,23 @@ import { useRouter } from "next/navigation";
 import { completarCoccion } from "@/app/calidad/actions";
 import CoccionCampos, { type ValoresCoccion } from "@/components/CoccionCampos";
 
-// Botón de la lista de Calidad para completar (o corregir) cocción,
-// hidratación y apto de un análisis que ya está cargado.
+// Botón de la lista de Calidad para completar (o corregir) contrato,
+// cocción, hidratación y apto de un análisis que ya está cargado.
 export default function CompletarCoccion({
   registroId,
   iniciales,
+  contratoInicial,
   titulo,
 }: {
   registroId: string;
   iniciales: ValoresCoccion;
+  contratoInicial: string;
   titulo: string;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [valores, setValores] = useState<ValoresCoccion>(iniciales);
+  const [contrato, setContrato] = useState(contratoInicial);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -43,6 +46,7 @@ export default function CompletarCoccion({
         type="button"
         onClick={() => {
           setValores(iniciales);
+          setContrato(contratoInicial);
           setError(null);
           setAbierto(true);
         }}
@@ -53,7 +57,7 @@ export default function CompletarCoccion({
             : "border-amber-400 text-amber-800 bg-amber-50 hover:bg-amber-100")
         }
       >
-        {completo ? "Editar cocción" : "Completar cocción"}
+        {completo ? "Editar análisis" : "Completar análisis"}
       </button>
 
       {abierto && (
@@ -68,6 +72,22 @@ export default function CompletarCoccion({
             <h3 className="font-medium text-brand-navy mb-1">Completar análisis</h3>
             <p className="text-xs text-gray-500 mb-4">{titulo}</p>
             <form action={guardar} className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Contrato (CV)
+                </label>
+                <input
+                  name="numero_contrato"
+                  type="text"
+                  className="input"
+                  placeholder="Ej.: 26-118"
+                  value={contrato}
+                  onChange={(e) => setContrato(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Dejalo vacío si todavía no sabés a qué contrato va.
+                </p>
+              </div>
               <CoccionCampos
                 valores={valores}
                 mostrarAviso={false}

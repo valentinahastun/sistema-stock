@@ -252,6 +252,7 @@ export default async function CalidadPage({
                       {puedeCargar && (
                         <CompletarCoccion
                           registroId={f.id}
+                          contratoInicial={f.numero_contrato ?? ""}
                           titulo={`${f.fecha} · ${d.planta} · ${d.producto}${d.productor && d.productor !== "—" ? " · " + d.productor : ""}`}
                           iniciales={{
                             coccion_minutos: f.coccion_minutos === null ? "" : String(f.coccion_minutos),

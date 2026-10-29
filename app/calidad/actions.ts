@@ -263,8 +263,8 @@ export async function vincularCalidad(
   }
 }
 
-// Completa (o corrige) cocción, hidratación y apto de un análisis ya
-// cargado. Admin y calidad; RLS decide sobre qué registros puede cada uno.
+// Completa (o corrige) contrato, cocción, hidratación y apto de un
+// análisis ya cargado. Admin y calidad; RLS decide sobre qué registros puede cada uno.
 export async function completarCoccion(
   registroId: string,
   formData: FormData
@@ -280,10 +280,17 @@ export async function completarCoccion(
     const coccion = leerCoccion(formData);
     if (!coccion.ok) return coccion;
 
+    // El contrato también se puede cargar o corregir acá, para cuando
+    // el análisis se hizo antes de saber a qué CV iba la mercadería.
+    const cambios: Record<string, unknown> = { ...coccion.datos };
+    if (formData.has("numero_contrato")) {
+      cambios.numero_contrato = strOrNull(formData.get("numero_contrato"));
+    }
+
     const supabase = createClient();
     const { data, error } = await supabase
       .from("registros_calidad")
-      .update(coccion.datos)
+      .update(cambios)
       .eq("id", registroId)
       .select("id");
 
