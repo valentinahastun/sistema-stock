@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { guardarCalidad } from "@/app/calidad/actions";
+import CoccionCampos, { coccionVacia, type ValoresCoccion } from "@/components/CoccionCampos";
 
 // Se mantiene exportado por compatibilidad con quien importe el tipo,
 // aunque el formulario ya no elige lote: toda carga de calidad queda
@@ -24,7 +25,8 @@ export type OpcionCatalogo = { id: string; nombre: string };
 // v2: cambió el set de parámetros de calidad (ver migración
 // 0010_calidad_parametros.sql), así que se cambia la clave para no
 // levantar un borrador viejo con campos que ya no existen.
-const CLAVE_BORRADOR = "calidad-draft-v2";
+// v3: se agregaron cocción, hidratación y apto (0016_coccion_hidratacion.sql).
+const CLAVE_BORRADOR = "calidad-draft-v3";
 
 // Los 7 campos que suman "daños totales" (ver columna calculada en la
 // base). Se usa esta lista tanto para el cálculo en vivo como para
@@ -39,7 +41,7 @@ const CAMPOS_DANOS = [
   "pct_otros_defectos_leves",
 ] as const;
 
-type Borrador = {
+type Borrador = ValoresCoccion & {
   planta_id: string;
   producto_id: string;
   productor_id: string;
@@ -76,6 +78,7 @@ function borradorVacio(hoy: string): Borrador {
     pct_humedad: "",
     pct_bajo_zaranda: "",
     observaciones: "",
+    ...coccionVacia,
   };
 }
 
@@ -421,6 +424,8 @@ export default function CalidadForm({
           "Daños totales" se calcula solo, sumando los 7 campos de arriba
           (no incluye materia extraña, humedad ni bajo zaranda).
         </p>
+
+        <CoccionCampos valores={campos} onCambio={(campo, valor) => actualizar(campo, valor)} />
 
         <Campo label="Observaciones">
           <textarea

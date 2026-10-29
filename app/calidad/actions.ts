@@ -19,6 +19,47 @@ function strOrNull(v: FormDataEntryValue | null): string | null {
   return s === "" ? null : s;
 }
 
+// Cocción, hidratación y decisión de apto (ver 0016_coccion_hidratacion.sql).
+// Se usa al cargar un análisis nuevo y al completarlo después, porque la
+// hidratación lleva horas de remojo y suele estar lista al día siguiente.
+function leerCoccion(formData: FormData):
+  | { ok: true; datos: Record<string, number | string | boolean | null> }
+  | { ok: false; error: string } {
+  const coccion_minutos = numOrNull(formData.get("coccion_minutos"));
+  const resultado = strOrNull(formData.get("coccion_resultado"));
+  const hidratacion_peso_seco = numOrNull(formData.get("hidratacion_peso_seco"));
+  const hidratacion_peso_hidratado = numOrNull(formData.get("hidratacion_peso_hidratado"));
+  const aptoTxt = strOrNull(formData.get("apto"));
+
+  if (resultado !== null && resultado !== "bien" && resultado !== "mal") {
+    return { ok: false, error: "El resultado de cocción tiene que ser bien o mal." };
+  }
+  if ((hidratacion_peso_seco === null) !== (hidratacion_peso_hidratado === null)) {
+    return { ok: false, error: "Para la hidratación hacen falta los dos pesos: seco e hidratado." };
+  }
+  if (hidratacion_peso_seco !== null && hidratacion_peso_seco <= 0) {
+    return { ok: false, error: "El peso seco tiene que ser mayor a cero." };
+  }
+  if (
+    hidratacion_peso_seco !== null &&
+    hidratacion_peso_hidratado !== null &&
+    hidratacion_peso_hidratado < hidratacion_peso_seco
+  ) {
+    return { ok: false, error: "El peso hidratado no puede ser menor que el peso seco." };
+  }
+
+  return {
+    ok: true,
+    datos: {
+      coccion_minutos,
+      coccion_resultado: resultado,
+      hidratacion_peso_seco,
+      hidratacion_peso_hidratado,
+      apto: aptoTxt === "si" ? true : aptoTxt === "no" ? false : null,
+    },
+  };
+}
+
 export async function guardarCalidad(formData: FormData): Promise<Resultado> {
   try {
     const perfil = await getPerfilActual();
@@ -49,6 +90,8 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
     if (!fecha) {
       return { ok: false, error: "Falta la fecha." };
     }
+    const coccion = leerCoccion(formData);
+    if (!coccion.ok) return coccion;
     if (!lote_id && (!planta_id || !producto_id)) {
       return {
         ok: false,
@@ -114,6 +157,7 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       pct_materia_extrana,
       pct_humedad,
       observaciones,
+      ...coccion.datos,
       fotos: urls,
       created_by: perfil.id,
     };
@@ -209,6 +253,45 @@ export async function vincularCalidad(
 
     if (error) {
       return { ok: false, error: error.message };
+    }
+
+    revalidatePath("/calidad");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Completa (o corrige) cocción, hidratación y apto de un análisis ya
+// cargado. Admin y calidad; RLS decide sobre qué registros puede cada uno.
+export async function completarCoccion(
+  registroId: string,
+  formData: FormData
+): Promise<Resultado> {
+  try {
+    const perfil = await getPerfilActual();
+    if (!perfil || (perfil.rol !== "admin" && perfil.rol !== "calidad")) {
+      throw new Error("No tenés permiso para cargar calidad.");
+    }
+    if (!registroId) {
+      return { ok: false, error: "Falta el registro a completar." };
+    }
+    const coccion = leerCoccion(formData);
+    if (!coccion.ok) return coccion;
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("registros_calidad")
+      .update(coccion.datos)
+      .eq("id", registroId)
+      .select("id");
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+    if (!data || data.length === 0) {
+      return { ok: false, error: "No se pudo guardar: el registro no existe o no tenés permiso para editarlo." };
     }
 
     revalidatePath("/calidad");

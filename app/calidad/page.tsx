@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import BotonEliminarCalidad from "@/components/BotonEliminarCalidad";
+import CompletarCoccion from "@/components/CompletarCoccion";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -20,7 +21,7 @@ function esVideo(url: string): boolean {
 export default async function CalidadPage({
   searchParams,
 }: {
-  searchParams: { planta_id?: string; producto_id?: string; productor_id?: string };
+  searchParams: { planta_id?: string; producto_id?: string; productor_id?: string; apto?: string };
 }) {
   const perfil = await getPerfilActual();
   const supabase = createClient();
@@ -35,7 +36,7 @@ export default async function CalidadPage({
       supabase
         .from("registros_calidad")
         .select(
-          "id, fecha, pct_partidos, pct_tegumento_danado, pct_levemente_manchados, pct_manchados, pct_arrugados, pct_otros_defectos_graves, pct_otros_defectos_leves, pct_danos_totales, pct_materia_extrana, pct_humedad, pct_bajo_zaranda, observaciones, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
+          "id, fecha, pct_partidos, pct_tegumento_danado, pct_levemente_manchados, pct_manchados, pct_arrugados, pct_otros_defectos_graves, pct_otros_defectos_leves, pct_danos_totales, pct_materia_extrana, pct_humedad, pct_bajo_zaranda, coccion_minutos, coccion_resultado, hidratacion_peso_seco, hidratacion_peso_hidratado, hidratacion_pct, apto, observaciones, fotos, lote_id, numero_contrato, planta_id, producto_id, productor_id, lotes(numero_cp, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre)), plantas(nombre), productos(nombre), productores(nombre)"
         )
         .order("fecha", { ascending: false })
         .limit(300),
@@ -55,6 +56,12 @@ export default async function CalidadPage({
     pct_materia_extrana: number | null;
     pct_humedad: number | null;
     pct_bajo_zaranda: number | null;
+    coccion_minutos: number | null;
+    coccion_resultado: string | null;
+    hidratacion_peso_seco: number | null;
+    hidratacion_peso_hidratado: number | null;
+    hidratacion_pct: number | null;
+    apto: boolean | null;
     observaciones: string | null;
     fotos: string[] | null;
     lote_id: string | null;
@@ -116,6 +123,10 @@ export default async function CalidadPage({
   if (searchParams.productor_id) {
     filas = filas.filter((f) => datosFila(f).productor_id === searchParams.productor_id);
   }
+  const pendientes = filas.filter((f) => f.apto === null).length;
+  if (searchParams.apto === "pendiente") {
+    filas = filas.filter((f) => f.apto === null);
+  }
 
   const pct = (n: number | null) => (n === null ? "—" : `${Number(n).toFixed(2)}%`);
 
@@ -147,6 +158,35 @@ export default async function CalidadPage({
         basePath="/calidad"
       />
 
+      {(pendientes > 0 || searchParams.apto === "pendiente") && (
+        <div className="mt-4 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded px-4 py-2 text-sm">
+          <span>
+            {pendientes === 0
+              ? "No quedan análisis pendientes de decidir si son aptos."
+              : `${pendientes} análisis ${pendientes === 1 ? "sigue" : "siguen"} sin decisión de apto / no apto.`}
+          </span>
+          {searchParams.apto === "pendiente" ? (
+            <Link
+              href={`/calidad?${new URLSearchParams(
+                Object.entries({ ...searchParams, apto: "" }).filter(([, v]) => v) as [string, string][]
+              ).toString()}`}
+              className="underline whitespace-nowrap"
+            >
+              Ver todos
+            </Link>
+          ) : (
+            <Link
+              href={`/calidad?${new URLSearchParams(
+                Object.entries({ ...searchParams, apto: "pendiente" }).filter(([, v]) => v) as [string, string][]
+              ).toString()}`}
+              className="underline whitespace-nowrap"
+            >
+              Ver solo pendientes
+            </Link>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow mt-4 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -157,6 +197,9 @@ export default async function CalidadPage({
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2">CP / contrato</th>
+              <th className="px-4 py-2">Apto</th>
+              <th className="px-4 py-2 text-right">Cocción</th>
+              <th className="px-4 py-2 text-right">Hidratación</th>
               <th className="px-4 py-2 text-right">Partidos y quebrados</th>
               <th className="px-4 py-2 text-right">Tegumento dañado</th>
               <th className="px-4 py-2 text-right">Levemente manchados</th>
@@ -197,6 +240,47 @@ export default async function CalidadPage({
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2">
+                    <div className="flex flex-col items-start gap-1">
+                      {f.apto === true ? (
+                        <span className="text-xs font-medium rounded px-2 py-0.5 bg-green-100 text-green-800">Apto</span>
+                      ) : f.apto === false ? (
+                        <span className="text-xs font-medium rounded px-2 py-0.5 bg-red-100 text-red-800">No apto</span>
+                      ) : (
+                        <span className="text-xs font-medium rounded px-2 py-0.5 bg-amber-100 text-amber-800">Pendiente</span>
+                      )}
+                      {puedeCargar && (
+                        <CompletarCoccion
+                          registroId={f.id}
+                          titulo={`${f.fecha} · ${d.planta} · ${d.producto}${d.productor && d.productor !== "—" ? " · " + d.productor : ""}`}
+                          iniciales={{
+                            coccion_minutos: f.coccion_minutos === null ? "" : String(f.coccion_minutos),
+                            coccion_resultado: f.coccion_resultado ?? "",
+                            hidratacion_peso_seco: f.hidratacion_peso_seco === null ? "" : String(f.hidratacion_peso_seco),
+                            hidratacion_peso_hidratado:
+                              f.hidratacion_peso_hidratado === null ? "" : String(f.hidratacion_peso_hidratado),
+                            apto: f.apto === true ? "si" : f.apto === false ? "no" : "",
+                          }}
+                        />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    {f.coccion_minutos === null && !f.coccion_resultado ? (
+                      "—"
+                    ) : (
+                      <>
+                        {f.coccion_minutos !== null ? `${Number(f.coccion_minutos)} min` : ""}
+                        {f.coccion_resultado && (
+                          <span className={f.coccion_resultado === "bien" ? "text-green-700" : "text-red-700"}>
+                            {f.coccion_minutos !== null ? " · " : ""}
+                            {f.coccion_resultado === "bien" ? "bien" : "mal"}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right">{pct(f.hidratacion_pct)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_partidos)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_tegumento_danado)}</td>
                   <td className="px-4 py-2 text-right">{pct(f.pct_levemente_manchados)}</td>
@@ -256,7 +340,7 @@ export default async function CalidadPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 20 : 19} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 23 : 22} className="px-4 py-6 text-center text-gray-400">
                   No hay registros de calidad todavía para este filtro.
                 </td>
               </tr>
