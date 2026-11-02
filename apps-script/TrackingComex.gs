@@ -349,7 +349,11 @@ function fechaBookings() {
     if (!numeros.length) return;
     let primero = null;
     numeros.forEach(n => {
-      GmailApp.search('"' + n + '"', 0, 50).forEach(h => {
+      // Primero los hilos con el número en el asunto (la confirmación del forwarder
+      // suele tenerlo); si no hay, los 50 más recientes que lo nombran.
+      let hilos = GmailApp.search('subject:"' + n + '"', 0, 100);
+      if (!hilos.length) hilos = GmailApp.search('"' + n + '"', 0, 50);
+      hilos.forEach(h => {
         const m = h.getMessages()[0];
         if (!primero || m.getDate() < primero.getDate()) primero = m;
       });
