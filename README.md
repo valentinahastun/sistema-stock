@@ -61,7 +61,9 @@ Después de cada sincronización el script revisa el Gmail de Valentina:
 
 | Paso | Cómo lo reconoce | |
 | --- | --- | --- |
-| Draft BL enviado | Lourdes o Valentina mandan a un cliente o broker un adjunto "draft … BL"; el CV sale del asunto | solo |
+| Drafts enviados | Lourdes o Valentina mandan al cliente o broker un adjunto draft (draft BL, PREFITO, ORIGEN - AG nnn, borrador); el CV sale del asunto | solo |
+| Originales emitidos | Lourdes o Valentina mandan un adjunto "scan cv 26-…" | solo |
+| Booking (fecha) | El primer mail que nombra el número de booking | solo |
 | Draft BL aprobado | En el hilo "DRAFT - AG nnn" con Reymar, Lourdes o Valentina escriben "aprobado" | solo |
 | Draft BL aprobado | El cliente contesta "ok", "aprobado", etc. después del draft | Por confirmar |
 | Certificado de origen y fito | Reymar manda los originales en el hilo "DRAFT - AG nnn" | solo |

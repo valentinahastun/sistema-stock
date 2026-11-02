@@ -271,6 +271,9 @@ function mailDiario() {
 //   3. Certificado de origen y fito: en el hilo "DRAFT - AG nnn", Reymar manda los
 //      originales (COD - AG nnn.pdf, fito con número de SENASA nnn-AR-XX-...).
 //   4. BL fechado: mail con asunto "BL FINAL FECHADO - CV ...".
+//   5. Originales emitidos: Lourdes o Valentina mandan un adjunto "scan cv 26-...".
+//   Para el 1 cuenta cualquier draft de documentos al cliente (draft BL, PREFITO,
+//   ORIGEN - AG nnn, borrador), no solo el BL.
 const MAIL = {
   EQUIPO: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   PROVEEDORES: ['argreen.com.ar', 'reymar', 'cargostaff', 'isbargentina', 'fiscalessanmartin', 'splushipping',
@@ -290,7 +293,7 @@ function leerMails() {
   const equipo = '(' + MAIL.EQUIPO.map(e => 'from:' + e).join(' OR ') + ')';
 
   const busquedas = [
-    equipo + ' has:attachment filename:draft ' + despues,
+    equipo + ' has:attachment {filename:draft filename:prefito filename:origen filename:scan} ' + despues,
     'subject:"DRAFT - AG" ' + despues,
     'subject:"BL FINAL" ' + despues,
   ];
@@ -421,11 +424,20 @@ function analizarMensajes(msgs) {
       return;
     }
 
-    // 1: draft BL enviado al cliente
-    if (delEquipo(m) && m.adjuntos.some(esAdjuntoDraftBl) && m.para.some(esCliente)) {
+    // 5: scan de los originales
+    const scans = delEquipo(m) ? m.adjuntos.filter(a => /scan/i.test(a)) : [];
+    if (scans.length) {
+      const cv = scans.map(cvDeAsunto).filter(Boolean)[0] || cvDeAsunto(asunto);
+      add(m, 'originales', cv, !!cv, cv ? 'Se envió el scan de originales (' + scans[0] + ')'
+        : 'Scan enviado sin CV en el nombre ni en el asunto (' + scans[0] + ')');
+    }
+
+    // 1: drafts de documentos enviados al cliente
+    if (delEquipo(m) && m.adjuntos.some(esAdjuntoDraft) && m.para.some(esCliente)) {
       const cv = cvDeAsunto(asunto);
-      add(m, 'draft_enviado', cv, !!cv, cv ? 'Adjunto draft BL enviado a ' + m.para.filter(esCliente)[0]
-        : 'Draft BL enviado a ' + m.para.filter(esCliente)[0] + ', sin CV en el asunto');
+      const cual = m.adjuntos.filter(esAdjuntoDraft)[0];
+      add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
+        : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
       // Respuesta del cliente en el mismo hilo
       const resp = (porHilo[m.hilo] || []).find(x => x.fecha > m.fecha && esCliente(x.de) && MAIL.APROBACION_CLIENTE.test(x.texto));
       if (resp) {
@@ -439,6 +451,12 @@ function analizarMensajes(msgs) {
   const unicos = {};
   items.forEach(i => { if (!unicos[i.id]) unicos[i.id] = i; });
   return Object.keys(unicos).map(k => unicos[k]);
+}
+
+// Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
+function esAdjuntoDraft(nombre) {
+  const n = String(nombre).toLowerCase();
+  return /draft|prefito|borrador|^origen\s*-\s*ag/.test(n) && !/scan/.test(n);
 }
 
 function esAdjuntoDraftBl(nombre) {
@@ -541,4 +559,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, direcciones };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones };
