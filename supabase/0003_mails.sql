@@ -103,6 +103,14 @@ begin
       values (r.id, r.fecha, r.asunto, r.remitente, r.url, r.cv, nullif(r.lote, ''), v_clave, r.paso, r.motivo,
               'aplicado', 'mail', now());
       v_aplicados := v_aplicados + 1;
+    elsif r.cv is not null
+      and not exists (select 1 from op_operaciones where cv in (r.cv, coalesce(r.cv_alt, ''))) then
+      -- La operación no está en el tracking (ya cobrada, o fuera de lo que se sigue):
+      -- se guarda para no volver a leerlo, pero no se pide confirmar.
+      insert into op_mails (id, fecha, asunto, remitente, url, cv, lote, clave, paso, motivo, estado, resuelto_por, resuelto_at)
+      values (r.id, r.fecha, r.asunto, r.remitente, r.url, r.cv, nullif(r.lote, ''), null, r.paso,
+              coalesce(r.motivo, '') || ' · operación fuera del tracking (cobrada o no seguida)',
+              'descartado', 'mail', now());
     else
       insert into op_mails (id, fecha, asunto, remitente, url, cv, lote, clave, paso, motivo, estado)
       values (r.id, r.fecha, r.asunto, r.remitente, r.url, r.cv, nullif(r.lote, ''), v_clave, r.paso,
