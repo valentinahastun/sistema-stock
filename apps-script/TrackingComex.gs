@@ -334,7 +334,39 @@ function leerMails() {
   props.setProperty('MAIL_DESDE', inicio.toISOString());
   Logger.log('Mails leídos: %s · reconocidos: %s · nuevos: %s · pasos marcados: %s · por confirmar: %s',
     msgs.length, items.length, r.nuevos, r.aplicados, r.pendientes);
+  try { fechaBookings(); } catch (e) { Logger.log('No se pudo buscar la fecha de los bookings: ' + e.message); }
   return r;
+}
+
+// Fecha real del booking: el primer mail que nombra el número de booking.
+// Revisa hasta 15 operaciones por corrida (Gmail es lento); las que ya tienen la
+// fecha del mail o cargada a mano no se vuelven a buscar.
+function fechaBookings() {
+  const lista = rpc('op_bookings_token', { p_token: prop('TOKEN_SYNC') }).slice(0, 15);
+  const items = [];
+  lista.forEach(o => {
+    const numeros = String(o.booking).toUpperCase().split(/[\s,;/]+/).filter(n => /^[A-Z0-9-]{6,}$/.test(n) && /\d{5,}/.test(n));
+    if (!numeros.length) return;
+    let primero = null;
+    numeros.forEach(n => {
+      GmailApp.search('"' + n + '"', 0, 50).forEach(h => {
+        const m = h.getMessages()[0];
+        if (!primero || m.getDate() < primero.getDate()) primero = m;
+      });
+    });
+    if (!primero) return;
+    items.push({
+      id: 'booking:' + o.clave + ':' + numeros.join('/'), fecha: primero.getDate().toISOString(),
+      asunto: primero.getSubject() || '', remitente: direcciones(primero.getFrom())[0] || '',
+      url: 'https://mail.google.com/mail/#search/' + encodeURIComponent('rfc822msgid:' + (primero.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+      cv: o.clave.slice(0, 6), lote: o.clave.slice(6), paso: 'booking', seguro: true,
+      motivo: 'Primer mail con el booking ' + numeros.join(' / '),
+    });
+  });
+  if (items.length) {
+    const x = rpc('op_mail', { p_token: prop('TOKEN_SYNC'), p_items: items });
+    Logger.log('Bookings revisados: %s · con fecha del mail: %s', lista.length, x.aplicados);
+  }
 }
 
 // Para volver a revisar los últimos 60 días desde cero (lo ya registrado no se duplica).
