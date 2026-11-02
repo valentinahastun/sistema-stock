@@ -26,6 +26,7 @@ export default async function NavBar() {
             {u.acceso?.responsable ? NOMBRE_RESPONSABLE[u.acceso.responsable] : u.email}
             {u.acceso ? (u.acceso.rol === "editor" ? " · Edición" : " · Solo lectura") : ""}
           </span>
+          <Link href="/contrasena" className="text-gray-300 hover:text-white underline">Contraseña</Link>
           <LogoutButton />
         </div>
       </div>
