@@ -1,4 +1,4 @@
-# Tracking Comex
+# Operaciones Comex
 
 App web para seguir cada operación de exportación de Argreen paso a paso, de la firma
 del contrato a la cobranza, con alertas y un mail diario. Es una app separada del
@@ -11,7 +11,7 @@ mismos usuarios.
 | --- | --- |
 | `app/`, `components/`, `lib/` | La app (Next.js). Pantallas: Agenda, Operaciones y el tracking de cada operación |
 | `supabase/0001_tracking.sql` | Tablas, permisos, sincronización y reglas de alertas |
-| `apps-script/TrackingComex.gs` | Lee las planillas cada hora, carga la base y manda el mail diario de las 8 |
+| `apps-script/TrackingComex.gs` | Lee las planillas cada 15 minutos, carga la base y manda el mail diario de las 8 |
 
 ## Instalación (una sola vez)
 
@@ -32,7 +32,7 @@ mismos usuarios.
    - `APP_URL`: el link de la app (para los links del mail diario)
 
    Zona horaria del proyecto: Buenos Aires. Ejecutar `sincronizar` una vez (pide permisos)
-   y después `instalar` (programa la sincronización cada hora y el mail a las 8).
+   y después `instalar` (programa la sincronización cada 15 minutos y el mail a las 8).
 
 ## Quién entra
 

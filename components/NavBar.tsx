@@ -13,7 +13,7 @@ export default async function NavBar() {
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Image src="/logo.png" alt="ARGREEN" width={100} height={29} />
-          <span className="text-sm font-semibold">Tracking Comex</span>
+          <span className="text-sm font-semibold">Operaciones Comex</span>
           {u.acceso && (
             <nav className="flex gap-4 text-sm">
               <Link href="/" className="hover:text-brand-green">Agenda</Link>

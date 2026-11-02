@@ -9,7 +9,7 @@ type Resultado = { ok: true } | { ok: false; error: string };
 async function editor() {
   const u = await getUsuario();
   if (!u?.acceso || u.acceso.rol !== "editor") {
-    throw new Error("Solo Lourdes y Valentina pueden editar el tracking.");
+    throw new Error("Solo Lourdes y Valentina pueden editar Operaciones Comex.");
   }
   return u.email;
 }

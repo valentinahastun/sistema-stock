@@ -20,6 +20,8 @@ export type Operacion = {
   fecha_carga_planta: string | null;
   fecha_consolidado: string | null;
   corte_documental: string | null;
+  lugar_carga: string | null;
+  deposito: string | null;
   etd: string | null;
   eta: string | null;
   activa: boolean;

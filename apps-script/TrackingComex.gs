@@ -1,5 +1,5 @@
 /**
- * Tracking de operaciones Comex · sincronización y mail diario
+ * Operaciones Comex · sincronización y mail diario
  *
  * Proyecto de Apps Script independiente (script.google.com > Nuevo proyecto),
  * creado con la cuenta de Valentina, que tiene acceso a las planillas.
@@ -30,14 +30,20 @@ const CONFIG = {
 
   VEN: { hoja: 'VENTAS', fila: 2, fecha: 'A', cv: 'B', firmado: 'C', producto: 'D', tn: 'G',
          buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
-  SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', consolidado: 'H',
+  SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', consolidado: 'H',
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
          etd: 'AO', eta: 'AP', cobro: 'AX' },
   FLE: { hoja: 'PAGOS FLETES', fila: 9, cv: 'B', estado: 'M' },
   COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', estado: 'N' },
-  PRO: { hojas: { 'Cargas Lu': 'lourdes', 'Cargas Vale': 'valentina' }, fila: 5, cv: 'A', producto: 'B',
-         tn: 'C', cliente: 'E', destino: 'F', booking: 'G', etiqueta: 'H', nBooking: 'I', etd: 'M',
-         corte: 'O', carga: 'R', consolidado: 'S' },
+  // PROYECCION CARGAS: las columnas se buscan por el título de la fila 4 (las dos
+  // solapas no tienen exactamente las mismas columnas).
+  PRO: { hojas: { 'Cargas Lu': 'lourdes', 'Cargas Vale': 'valentina' }, filaTitulos: 4,
+         // Si hay más de un título posible, se toma el primero que tenga dato.
+         titulos: { cv: ['cv'], producto: ['mercaderia'], tn: ['tn'], cliente: ['cliente'], destino: ['destino'],
+                    booking: ['¿booking?'], etiqueta: ['etiqueta aprobada'], nBooking: ['n° booking'], etd: ['etd'],
+                    corte: ['corte documental'], carga: ['fecha carga', 'fecha de carga'],
+                    consolidado: ['fecha de consolidado', 'fecha consolidado'],
+                    lugar: ['donde se carga'], deposito: ['deposito'] } },
 };
 
 // ============================================================
@@ -45,9 +51,9 @@ const CONFIG = {
 // ============================================================
 function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('sincronizar').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('sincronizar').timeBased().everyMinutes(15).create();
   ScriptApp.newTrigger('mailDiario').timeBased().everyDays(1).atHour(CONFIG.HORA_MAIL).create();
-  Logger.log('Listo: sincronización cada hora y mail diario a las ' + CONFIG.HORA_MAIL + ' h.');
+  Logger.log('Listo: sincronización cada 15 minutos y mail diario a las ' + CONFIG.HORA_MAIL + ' h.');
 }
 
 // ============================================================
@@ -71,7 +77,7 @@ function leerTodo() {
     return ult >= fila ? sh.getRange(fila, 1, ult - fila + 1, sh.getLastColumn()).getValues() : [];
   };
   const proyeccion = {};
-  Object.keys(CONFIG.PRO.hojas).forEach(h => { proyeccion[h] = leer(pro, h, CONFIG.PRO.fila); });
+  Object.keys(CONFIG.PRO.hojas).forEach(h => { proyeccion[h] = leer(pro, h, CONFIG.PRO.filaTitulos); });
   return {
     ventas: leer(seg, CONFIG.VEN.hoja, CONFIG.VEN.fila),
     seguimiento: leer(seg, CONFIG.SEG.hoja, CONFIG.SEG.fila),
@@ -123,18 +129,40 @@ function armarDatos(t) {
   });
 
   // --- SEGUIMIENTO OPERATIVO (una operación ocupa varias filas: los datos van en la primera)
+  // Las filas siguientes sin CV son de la misma operación (un contenedor por fila).
   const seg = {};
+  const contenedores = {};
+  let actual = null;
   t.seguimiento.forEach(f => {
-    const k = norm(f[col(S.cv)]);
-    if (k && !seg[k]) seg[k] = f;
+    const crudo = txt(f[col(S.cv)]);
+    if (crudo) {
+      actual = norm(crudo) || null;
+      if (actual && !seg[actual]) seg[actual] = f;
+    }
+    const c = txt(f[col(S.container)]).toUpperCase();
+    if (actual && c) {
+      const lista = contenedores[actual] || (contenedores[actual] = []);
+      c.split(/[\s,;/]+/).filter(x => x.length >= 6).forEach(x => { if (lista.indexOf(x) < 0) lista.push(x); });
+    }
   });
 
   // --- PROYECCION CARGAS
   const pro = {};
   Object.keys(t.proyeccion).forEach(h => {
-    t.proyeccion[h].forEach(f => {
-      const k = norm(f[col(P.cv)]);
-      if (k && !pro[k]) pro[k] = { f, resp: P.hojas[h] };
+    const filas = t.proyeccion[h];
+    if (!filas.length) return;
+    const titulos = filas[0].map(x => sinAcentos(txt(x)).toLowerCase());
+    const pos = {};
+    Object.keys(P.titulos).forEach(c => {
+      pos[c] = P.titulos[c].map(n => titulos.indexOf(sinAcentos(n).toLowerCase())).filter(i => i >= 0);
+    });
+    filas.slice(1).forEach(f => {
+      const val = c => {
+        for (const i of pos[c]) if (f[i] !== '' && f[i] !== null && f[i] !== undefined) return f[i];
+        return '';
+      };
+      const k = norm(val('cv'));
+      if (k && !pro[k]) pro[k] = { val, resp: P.hojas[h] };
     });
   });
 
@@ -147,37 +175,39 @@ function armarDatos(t) {
     if (!CONFIG.PREFIJOS_CV.some(p => k.indexOf(p) === 0)) return;
     const v = ventas[k] || ventas[k.slice(0, 6)] || null;
     const s = seg[k] || null;
-    const pr = pro[k] ? pro[k].f : null;
-    const destino = txt(s && s[col(S.destino)]) || txt(v && v.destino) || txt(pr && pr[col(P.destino)]);
+    const pr = pro[k] ? pro[k].val : null;
+    const destino = txt(s && s[col(S.destino)]) || txt(v && v.destino) || txt(pr && pr('destino'));
     if (excluir(destino) || excluir(v && v.destino)) return;
 
     const o = op(k);
     o.destino = txt(v && v.destino) || destino;
-    o.cliente = txt(v && v.importador) || txt(s && s[col(S.cliente)]) || txt(pr && pr[col(P.cliente)]);
+    o.cliente = txt(v && v.importador) || txt(s && s[col(S.cliente)]) || txt(pr && pr('cliente'));
     o.broker = txt(v && v.buyer);
     o.silver = /silver/i.test(o.broker || '');
-    o.producto = (v && v.productos.join(', ')) || txt(pr && pr[col(P.producto)]);
-    o.tn = (v && v.tn) || num(pr && pr[col(P.tn)]);
+    o.producto = (v && v.productos.join(', ')) || txt(pr && pr('producto'));
+    o.tn = (v && v.tn) || num(pr && pr('tn'));
     o.payment_terms = txt(v && v.payment);
     o.fecha_contrato = isoOrNull(v && v.fecha);
     const r = txt(s && s[col(S.resp)]).toUpperCase();
     o.responsable = r === 'L' ? 'lourdes' : r === 'V' ? 'valentina' : (pro[k] ? pro[k].resp : null);
     o.tipo_bl = txt(s && s[col(S.tipoBl)]);
-    o.booking = txt(pr && pr[col(P.nBooking)]) || txt(s && s[col(S.booking)]);
-    o.contenedores = txt(s && s[col(S.container)]);
-    o.fecha_carga_planta = isoOrNull(pr && pr[col(P.carga)]);
-    o.fecha_consolidado = isoOrNull(pr && pr[col(P.consolidado)]);
-    o.corte_documental = isoOrNull(pr && pr[col(P.corte)]);
-    o.etd = isoOrNull(pr && pr[col(P.etd)]) || isoOrNull(s && s[col(S.etd)]);
+    o.booking = txt(pr && pr('nBooking')) || txt(s && s[col(S.booking)]);
+    o.contenedores = (contenedores[k] || []).join(', ');
+    o.fecha_carga_planta = isoOrNull(pr && pr('carga'));
+    o.fecha_consolidado = isoOrNull(pr && pr('consolidado'));
+    o.corte_documental = isoOrNull(pr && pr('corte'));
+    o.lugar_carga = txt(pr && pr('lugar'));
+    o.deposito = txt(pr && pr('deposito')) || txt(s && s[col(S.deposito)]);
+    o.etd = isoOrNull(pr && pr('etd')) || isoOrNull(s && s[col(S.etd)]);
     o.eta = isoOrNull(s && s[col(S.eta)]);
 
     // Pasos que ya figuran hechos en las planillas
     if (v && v.firmado) hito(k, 'firma', v.fecha || null, 'ventas');
-    if (pr && esSi(pr[col(P.etiqueta)])) hito(k, 'etiqueta', null, 'proyeccion');
-    if ((pr && (esSi(pr[col(P.booking)]) || txt(pr[col(P.nBooking)]))) || (s && txt(s[col(S.booking)])))
+    if (pr && esSi(pr('etiqueta'))) hito(k, 'etiqueta', null, 'proyeccion');
+    if ((pr && (esSi(pr('booking')) || txt(pr('nBooking')))) || (s && txt(s[col(S.booking)])))
       hito(k, 'booking', null, pr ? 'proyeccion' : 'seguimiento', o.booking);
     if (s && esFecha(s[col(S.carga)])) hito(k, 'camiones', s[col(S.carga)], 'seguimiento');
-    if (s && txt(s[col(S.container)])) hito(k, 'retiro', null, 'seguimiento', o.contenedores);
+    if (o.contenedores) hito(k, 'retiro', null, 'seguimiento', o.contenedores);
     if (s && esFecha(s[col(S.consolidado)])) hito(k, 'consolidado', s[col(S.consolidado)], 'seguimiento');
     if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'ddee', s[col(S.fechaOfi)], 'seguimiento', 'Permiso oficializado');
     if (s && esFecha(s[col(S.cobro)])) hito(k, 'cobranza', s[col(S.cobro)], 'seguimiento');
@@ -202,8 +232,8 @@ function mailDiario() {
   const vencidas = alertas.filter(a => a.nivel === 'vencida');
   const proximas = alertas.filter(a => a.nivel === 'proxima');
   if (!alertas.length) {
-    MailApp.sendEmail({ to: CONFIG.MAIL_DESTINATARIOS.join(','), subject: 'Tracking Comex · ' + fecha + ' · sin alertas',
-      htmlBody: '<p>Hoy no hay alertas en las operaciones abiertas.</p>' + (app ? '<p><a href="' + app + '">Abrir el tracking</a></p>' : '') });
+    MailApp.sendEmail({ to: CONFIG.MAIL_DESTINATARIOS.join(','), subject: 'Operaciones Comex · ' + fecha + ' · sin alertas',
+      htmlBody: '<p>Hoy no hay alertas en las operaciones abiertas.</p>' + (app ? '<p><a href="' + app + '">Abrir Operaciones Comex</a></p>' : '') });
     return;
   }
   const nombre = r => r === 'lourdes' ? 'Lourdes' : r === 'valentina' ? 'Valentina' : 'Sin responsable';
@@ -217,9 +247,9 @@ function mailDiario() {
       '</td><td>' + esc(a.mensaje) + '</td><td>' + nombre(a.responsable) + '</td></tr>').join('') + '</table>';
   MailApp.sendEmail({
     to: CONFIG.MAIL_DESTINATARIOS.join(','),
-    subject: 'Tracking Comex · ' + fecha + ' · ' + vencidas.length + ' para hoy, ' + proximas.length + ' próximas',
+    subject: 'Operaciones Comex · ' + fecha + ' · ' + vencidas.length + ' para hoy, ' + proximas.length + ' próximas',
     htmlBody: tabla(vencidas, 'Para resolver hoy', '#b42318') + tabla(proximas, 'Vencen en los próximos días', '#9a6700') +
-      (app ? '<p style="font-family:Arial;font-size:13px;margin-top:18px"><a href="' + app + '">Abrir el tracking</a></p>' : ''),
+      (app ? '<p style="font-family:Arial;font-size:13px;margin-top:18px"><a href="' + app + '">Abrir Operaciones Comex</a></p>' : ''),
   });
 }
 
@@ -277,6 +307,7 @@ function iso(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function isoOrNull(v) { return esFecha(v) ? iso(v) : null; }
+function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node

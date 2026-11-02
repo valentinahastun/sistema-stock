@@ -38,6 +38,8 @@ create table if not exists public.op_operaciones (
   fecha_carga_planta date,      -- PROYECCION CARGAS: Fecha de carga
   fecha_consolidado date,       -- PROYECCION CARGAS: Fecha de consolidado (prevista)
   corte_documental date,
+  lugar_carga text,             -- PROYECCION CARGAS: Dónde se carga
+  deposito text,
   etd date,
   eta date,
   activa boolean not null default true,
@@ -47,6 +49,8 @@ create table if not exists public.op_operaciones (
 
 -- Un paso hecho de una operación. fecha null = hecho, sin fecha conocida.
 alter table public.op_operaciones add column if not exists fecha_contrato date;
+alter table public.op_operaciones add column if not exists lugar_carga text;
+alter table public.op_operaciones add column if not exists deposito text;
 
 create table if not exists public.op_hitos (
   clave text not null references public.op_operaciones (clave) on delete cascade,
@@ -196,16 +200,16 @@ begin
   insert into op_operaciones as o (
     clave, cv, lote, cliente, broker, silver, destino, producto, tn, responsable,
     payment_terms, fecha_contrato, tipo_bl, booking, contenedores, fecha_carga_planta,
-    fecha_consolidado, corte_documental, etd, eta, activa, sincronizada_at)
+    fecha_consolidado, corte_documental, lugar_carga, deposito, etd, eta, activa, sincronizada_at)
   select x.clave, x.cv, nullif(x.lote, ''), x.cliente, x.broker, coalesce(x.silver, false),
          x.destino, x.producto, x.tn, x.responsable, x.payment_terms, x.fecha_contrato, x.tipo_bl,
          x.booking, x.contenedores, x.fecha_carga_planta, x.fecha_consolidado,
-         x.corte_documental, x.etd, x.eta, true, now()
+         x.corte_documental, x.lugar_carga, x.deposito, x.etd, x.eta, true, now()
   from jsonb_to_recordset(p_ops) as x(
     clave text, cv text, lote text, cliente text, broker text, silver boolean,
     destino text, producto text, tn numeric, responsable text, payment_terms text,
     fecha_contrato date, tipo_bl text, booking text, contenedores text, fecha_carga_planta date,
-    fecha_consolidado date, corte_documental date, etd date, eta date)
+    fecha_consolidado date, corte_documental date, lugar_carga text, deposito text, etd date, eta date)
   on conflict (clave) do update set
     cv = excluded.cv, lote = excluded.lote,
     cliente = coalesce(excluded.cliente, o.cliente),
@@ -219,10 +223,12 @@ begin
     fecha_contrato = coalesce(excluded.fecha_contrato, o.fecha_contrato),
     tipo_bl = coalesce(excluded.tipo_bl, o.tipo_bl),
     booking = coalesce(excluded.booking, o.booking),
-    contenedores = coalesce(excluded.contenedores, o.contenedores),
+    contenedores = coalesce(nullif(excluded.contenedores, ''), o.contenedores),
     fecha_carga_planta = coalesce(excluded.fecha_carga_planta, o.fecha_carga_planta),
     fecha_consolidado = coalesce(excluded.fecha_consolidado, o.fecha_consolidado),
     corte_documental = coalesce(excluded.corte_documental, o.corte_documental),
+    lugar_carga = coalesce(excluded.lugar_carga, o.lugar_carga),
+    deposito = coalesce(excluded.deposito, o.deposito),
     etd = coalesce(excluded.etd, o.etd),
     eta = coalesce(excluded.eta, o.eta),
     activa = true,

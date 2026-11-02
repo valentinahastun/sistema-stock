@@ -31,7 +31,7 @@ export default function CambiarContrasena() {
   return (
     <div className="max-w-sm mx-auto bg-white rounded-lg shadow p-6 mt-6">
       <h1 className="text-lg font-semibold text-brand-navy mb-1">Cambiar contraseña</h1>
-      <p className="text-xs text-gray-500 mb-4">Es la misma para el tracking y el sistema de stock.</p>
+      <p className="text-xs text-gray-500 mb-4">Es la misma para Operaciones Comex y el sistema de stock.</p>
       {ok ? (
         <div className="space-y-3">
           <p className="text-sm text-green-700">Contraseña guardada.</p>

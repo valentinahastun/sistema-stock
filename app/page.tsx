@@ -84,7 +84,11 @@ export default async function Agenda({ searchParams }: { searchParams: { resp?: 
                     <Link href={`/operaciones/${encodeURIComponent(e.op.clave)}`} className="text-brand-navy hover:underline">
                       {nombreOperacion(e.op)}
                     </Link>{" "}
-                    <span className="text-gray-500">· {e.op.cliente ?? ""} · {e.op.destino ?? ""}</span>
+                    <span className="text-gray-500">
+                      · {e.op.cliente ?? ""} · {e.op.destino ?? ""}
+                      {e.tipo === "Carga en planta" && e.op.lugar_carga ? ` · ${e.op.lugar_carga}` : ""}
+                      {e.tipo === "Consolidado" && e.op.deposito ? ` · ${e.op.deposito}` : ""}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-gray-500 text-right">
                     {e.op.responsable ? NOMBRE_RESPONSABLE[e.op.responsable] : ""}

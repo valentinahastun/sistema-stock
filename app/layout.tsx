@@ -3,7 +3,7 @@ import "./globals.css";
 import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "Tracking Comex",
+  title: "Operaciones Comex",
   description: "Seguimiento de operaciones de exportación de Argreen",
 };
 

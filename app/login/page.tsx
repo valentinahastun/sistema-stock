@@ -65,7 +65,7 @@ export default function LoginPage() {
         <div className="flex justify-center mb-2">
           <Image src="/logo.png" alt="ARGREEN" width={160} height={47} priority />
         </div>
-        <h1 className="text-lg font-semibold text-center text-brand-navy">Tracking Comex</h1>
+        <h1 className="text-lg font-semibold text-center text-brand-navy">Operaciones Comex</h1>
 
         <div>
           <label className="block text-sm text-gray-600 mb-1">Tu mail</label>
