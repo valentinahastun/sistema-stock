@@ -123,6 +123,34 @@ export function pasoActual(o: Operacion, hechos: Map<string, Hito>): Paso | null
   return lista.slice(ultimo + 1).find((p) => !estaHecho(o, p.codigo, hechos)) ?? null;
 }
 
+// Todos los pasos que se pueden marcar (para elegir en "Por confirmar").
+export const PASOS_MARCABLES: Paso[] = [
+  { codigo: "firma", nombre: "Contrato firmado" },
+  { codigo: "etiqueta", nombre: "Etiqueta aprobada" },
+  { codigo: "anticipo", nombre: "Anticipo cobrado" },
+  { codigo: "ip", nombre: "IP emitido" },
+  { codigo: "booking", nombre: "Booking confirmado" },
+  { codigo: "camiones", nombre: "Camiones cargados" },
+  { codigo: "retiro", nombre: "Contenedores retirados" },
+  { codigo: "consolidado", nombre: "Consolidado" },
+  { codigo: "ddee", nombre: "DDEE aprobada" },
+  { codigo: "draft_enviado", nombre: "Draft BL enviado al cliente" },
+  { codigo: "draft_aprobado", nombre: "Draft BL aprobado" },
+  { codigo: "doc_peso", nombre: "Certificado de peso (ISB)" },
+  { codigo: "doc_calidad", nombre: "Certificado de calidad (ISB)" },
+  { codigo: "doc_fumigacion", nombre: "Certificado de fumigación (ISB)" },
+  { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
+  { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
+  { codigo: "doc_bl", nombre: "BL fechado (forwarder)" },
+  { codigo: "doc_pl", nombre: "Packing list" },
+  { codigo: "doc_factura", nombre: "Factura Argreen" },
+  { codigo: "doc_factura_silver", nombre: "Factura Silver" },
+  { codigo: "originales", nombre: "Originales emitidos" },
+  { codigo: "flete", nombre: "Pago de flete y liberación del BL" },
+  { codigo: "envio_docs", nombre: "Envío de documentos" },
+  { codigo: "cobranza", nombre: "Cobranza" },
+];
+
 export const NOMBRE_RESPONSABLE: Record<string, string> = {
   lourdes: "Lourdes",
   valentina: "Valentina",

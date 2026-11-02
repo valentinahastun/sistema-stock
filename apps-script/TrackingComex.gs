@@ -9,6 +9,9 @@
  *     SEGUIMIENTO OPERATIVO, PAGOS FLETES, COBRANZAS) y PROYECCION CARGAS, y
  *     carga en la base del tracking las operaciones abiertas y los pasos que
  *     ya figuran hechos en las planillas. Nunca pisa lo marcado a mano en la app.
+ *   - leerMails(): después de cada sincronización revisa el mail y marca solos
+ *     los pasos que se reconocen sin dudas (draft BL enviado, documentos
+ *     aprobados, CO y fito originales, BL fechado). Lo dudoso va a "Por confirmar".
  *   - mailDiario(): a las 8 manda a Lourdes y Valentina el resumen de alertas.
  *
  * Instalación: ver README. Propiedades del script necesarias:
@@ -64,6 +67,8 @@ function sincronizar() {
   const r = rpc('op_sync', { p_token: prop('TOKEN_SYNC'), p_ops: datos.ops, p_hitos: datos.hitos });
   Logger.log('Operaciones: %s · nuevas: %s · pasos actualizados: %s · cerradas: %s',
     datos.ops.length, r.nuevas, r.hitos, r.cerradas);
+  // Después de las planillas, el mail (si falla, la sincronización igual quedó hecha)
+  try { leerMails(); } catch (e) { Logger.log('No se pudo leer el mail: ' + e.message); }
   return r;
 }
 
@@ -254,6 +259,195 @@ function mailDiario() {
 }
 
 // ============================================================
+// LECTURA DEL MAIL
+// ============================================================
+// Reglas (solo las que se pueden reconocer sin dudas; lo dudoso va a "Por confirmar"):
+//   1. Draft BL enviado: Lourdes o Valentina mandan a un cliente o broker (no a un
+//      proveedor) un adjunto que se llama "draft ... BL". El CV sale del asunto.
+//   2. Draft aprobado: en el hilo "DRAFT - AG nnn" de Reymar, Lourdes o Valentina
+//      escriben "aprobado/s" (piden avanzar con originales).
+//      Si en el hilo con el cliente, después del draft, el cliente contesta "ok",
+//      "aprobado", etc., queda en Por confirmar (puede ser por otra cosa).
+//   3. Certificado de origen y fito: en el hilo "DRAFT - AG nnn", Reymar manda los
+//      originales (COD - AG nnn.pdf, fito con número de SENASA nnn-AR-XX-...).
+//   4. BL fechado: mail con asunto "BL FINAL FECHADO - CV ...".
+const MAIL = {
+  EQUIPO: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
+  PROVEEDORES: ['argreen.com.ar', 'reymar', 'cargostaff', 'isbargentina', 'fiscalessanmartin', 'splushipping',
+    'americanashipping', 'interborders', 'rucalogistics', 'loginetsa', 'defibe', 'censersa',
+    'forwarding.com.ar', 'beyonders', 'biofixagri', 'controlunion', 'glog.com.ar'],
+  DIAS_PRIMERA_VEZ: 60,
+  APROBACION_CLIENTE: /\b(ok|okay|aprobad[oa]s?|approved?|confirmad[oa]s?|conformes?|all good|looks good|fine)\b/i,
+};
+
+function leerMails() {
+  const props = PropertiesService.getScriptProperties();
+  const ultima = props.getProperty('MAIL_DESDE');
+  const desde = ultima ? new Date(ultima) : new Date(Date.now() - MAIL.DIAS_PRIMERA_VEZ * 864e5);
+  desde.setDate(desde.getDate() - 1);   // un día de margen; los repetidos se descartan en la base
+  const inicio = new Date();
+  const despues = 'after:' + Utilities.formatDate(desde, 'America/Argentina/Buenos_Aires', 'yyyy/MM/dd');
+  const equipo = '(' + MAIL.EQUIPO.map(e => 'from:' + e).join(' OR ') + ')';
+
+  const busquedas = [
+    equipo + ' has:attachment filename:draft ' + despues,
+    'subject:"DRAFT - AG" ' + despues,
+    'subject:"BL FINAL" ' + despues,
+  ];
+  const vistos = {};
+  const hilos = [];
+  busquedas.forEach(q => {
+    for (let i = 0; ; i += 100) {
+      const lote = GmailApp.search(q, i, 100);
+      lote.forEach(h => { if (!vistos[h.getId()]) { vistos[h.getId()] = true; hilos.push(h); } });
+      if (lote.length < 100) break;
+    }
+  });
+
+  const msgs = [];
+  hilos.forEach(h => h.getMessages().forEach(m => {
+    if (m.getDate() < desde) return;
+    const de = direcciones(m.getFrom())[0] || '';
+    const texto = textoPropio(m.getPlainBody() || '');
+    // Los adjuntos tardan en leerse: solo cuando pueden servir
+    const verAdjuntos = MAIL.EQUIPO.indexOf(de) >= 0 || (/reymar/i.test(de) && /original/i.test(texto));
+    msgs.push({
+      id: m.getId(),
+      hilo: h.getId(),
+      fecha: m.getDate().toISOString(),
+      asunto: m.getSubject() || '',
+      hiloAsunto: h.getFirstMessageSubject() || '',
+      de,
+      para: direcciones(m.getTo() + ',' + m.getCc()),
+      texto,
+      adjuntos: verAdjuntos ? m.getAttachments({ includeInlineImages: false }).map(a => a.getName()) : [],
+      url: 'https://mail.google.com/mail/#search/' + encodeURIComponent('rfc822msgid:' + (m.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+    });
+  }));
+
+  const items = analizarMensajes(msgs);
+  let r = { nuevos: 0, aplicados: 0, pendientes: 0 };
+  for (let i = 0; i < items.length; i += 200) {
+    const x = rpc('op_mail', { p_token: prop('TOKEN_SYNC'), p_items: items.slice(i, i + 200) });
+    r = { nuevos: r.nuevos + x.nuevos, aplicados: r.aplicados + x.aplicados, pendientes: r.pendientes + x.pendientes };
+  }
+  props.setProperty('MAIL_DESDE', inicio.toISOString());
+  Logger.log('Mails leídos: %s · reconocidos: %s · nuevos: %s · pasos marcados: %s · por confirmar: %s',
+    msgs.length, items.length, r.nuevos, r.aplicados, r.pendientes);
+  return r;
+}
+
+// Para volver a revisar los últimos 60 días desde cero (lo ya registrado no se duplica).
+function reiniciarLecturaMails() {
+  PropertiesService.getScriptProperties().deleteProperty('MAIL_DESDE');
+  return leerMails();
+}
+
+// Recibe los mensajes ya leídos (objetos simples, para poder probarlo sin Gmail)
+// y devuelve los pasos reconocidos.
+function analizarMensajes(msgs) {
+  const items = [];
+  const add = (m, paso, cv, seguro, motivo) => items.push({
+    id: m.id + ':' + paso, fecha: m.fecha, asunto: m.asunto, remitente: m.de, url: m.url,
+    cv: cv ? cv.cv : null, lote: cv ? cv.lote : '', cv_alt: cv ? cv.alt || null : null, paso, seguro, motivo,
+  });
+  const delEquipo = m => MAIL.EQUIPO.indexOf(m.de) >= 0;
+  const esProveedor = e => MAIL.PROVEEDORES.some(p => e.split('@')[1] && e.split('@')[1].indexOf(p) >= 0);
+  const esCliente = e => e.indexOf('@') > 0 && !esProveedor(e);
+
+  // Por hilo, para buscar la respuesta del cliente después del draft
+  const porHilo = {};
+  msgs.forEach(m => (porHilo[m.hilo] = porHilo[m.hilo] || []).push(m));
+  Object.keys(porHilo).forEach(h => porHilo[h].sort((a, b) => (a.fecha < b.fecha ? -1 : 1)));
+
+  msgs.forEach(m => {
+    const asunto = m.hiloAsunto || m.asunto;
+
+    // 2 y 3: hilo de Reymar "DRAFT - AG nnn"
+    const ag = cvDeAg(asunto, m.fecha);
+    if (ag) {
+      if (delEquipo(m) && /aprobad/i.test(sinAcentos(m.texto))) {
+        add(m, 'draft_aprobado', ag, true, 'Documentos aprobados (hilo con Reymar)');
+      }
+      if (/reymar/i.test(m.de) && /original/i.test(m.texto)) {
+        if (m.adjuntos.some(a => /^(cod|origen|co)\b/i.test(a))) add(m, 'doc_co', ag, true, 'Reymar mandó el certificado de origen original');
+        if (m.adjuntos.some(a => /\d+-AR-[A-Z]{2}-\d+|fito/i.test(a) && !/prefito/i.test(a))) {
+          add(m, 'doc_fito', ag, true, 'Reymar mandó el fito original');
+        }
+      }
+      return;
+    }
+
+    // 4: BL final fechado
+    if (/BL\s+FINAL\s+FECHADO/i.test(m.asunto) && !/^\s*(re|rv|fw|fwd)\s*:/i.test(m.asunto)) {
+      const cv = cvDeAsunto(m.asunto);
+      add(m, 'doc_bl', cv, !!cv, cv ? 'Mail "BL FINAL FECHADO"' : 'BL final fechado sin CV en el asunto');
+      return;
+    }
+
+    // 1: draft BL enviado al cliente
+    if (delEquipo(m) && m.adjuntos.some(esAdjuntoDraftBl) && m.para.some(esCliente)) {
+      const cv = cvDeAsunto(asunto);
+      add(m, 'draft_enviado', cv, !!cv, cv ? 'Adjunto draft BL enviado a ' + m.para.filter(esCliente)[0]
+        : 'Draft BL enviado a ' + m.para.filter(esCliente)[0] + ', sin CV en el asunto');
+      // Respuesta del cliente en el mismo hilo
+      const resp = (porHilo[m.hilo] || []).find(x => x.fecha > m.fecha && esCliente(x.de) && MAIL.APROBACION_CLIENTE.test(x.texto));
+      if (resp) {
+        add(resp, 'draft_aprobado', cv, false, 'El cliente respondió "' + (resp.texto.match(MAIL.APROBACION_CLIENTE) || [''])[0] +
+          '" después del draft. Revisá que sea por el draft');
+      }
+    }
+  });
+
+  // Sin repetidos (el mismo mensaje puede aparecer en dos búsquedas)
+  const unicos = {};
+  items.forEach(i => { if (!unicos[i.id]) unicos[i.id] = i; });
+  return Object.keys(unicos).map(k => unicos[k]);
+}
+
+function esAdjuntoDraftBl(nombre) {
+  const n = String(nombre).toLowerCase();
+  return /draft/.test(n) && /(^|[^a-z])b\/?l([^a-z]|$)/.test(n);
+}
+
+// "CV 26-116 // MC26668" -> {cv:'26-116', lote:''}; "CV 26-115 A // ..." -> lote 'A'
+function cvDeAsunto(s) {
+  const t = String(s).toUpperCase();
+  const lote = '(?:\\s?([A-Z])(?![A-Z0-9]))?';
+  const m = t.match(new RegExp('CV\\s*(2\\d)\\s*-\\s*(\\d{3})' + lote)) ||
+            t.match(new RegExp('(?:^|[^0-9])(2\\d)\\s*-\\s*(\\d{3})(?![0-9])' + lote));
+  return m ? { cv: m[1] + '-' + m[2], lote: m[3] || '' } : null;
+}
+
+// "DRAFT - AG 088B" -> CV 26-088 lote B. El año no figura: se toma el del mail y,
+// si no existe esa operación, el anterior (para cargas de enero de contratos del año previo).
+function cvDeAg(s, fecha) {
+  const m = String(s).toUpperCase().match(/DRAFT\s*-\s*AG\s*(\d{3})\s*([A-Z])?(?![A-Z0-9])/);
+  if (!m) return null;
+  const anio = new Date(fecha).getFullYear() % 100;
+  return { cv: anio + '-' + m[1], lote: m[2] || '', alt: (anio - 1) + '-' + m[1] };
+}
+
+// "Lourdes <lourdes@x.com>, b@y.com" -> ['lourdes@x.com', 'b@y.com']
+function direcciones(s) {
+  return (String(s || '').match(/[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map(e => e.toLowerCase().replace(/^'+|'+$/g, ''));
+}
+
+// Lo que escribió esa persona, sin el mail citado debajo.
+function textoPropio(body) {
+  const t = '\n' + String(body).replace(/\r/g, '');
+  const cortes = [
+    /\n\s*(El|On)\s[^\n]{0,160}(\n[^\n]{0,160}){0,2}?(escribi[óo]|wrote)\s*:/i,
+    /\n\s*(De|From)\s*:\s/,
+    /\n\s*>/,
+    /\n-{3,}\s*(Original|Mensaje)/i,
+  ];
+  let fin = t.length;
+  cortes.forEach(re => { const m = t.match(re); if (m && m.index < fin) fin = m.index; });
+  return t.slice(1, fin).trim().slice(0, 2000);
+}
+
+// ============================================================
 // UTILIDADES
 // ============================================================
 function rpc(fn, body) {
@@ -311,4 +505,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, direcciones };

@@ -11,7 +11,9 @@ mismos usuarios.
 | --- | --- |
 | `app/`, `components/`, `lib/` | La app (Next.js). Pantallas: Agenda, Operaciones y el tracking de cada operación |
 | `supabase/0001_tracking.sql` | Tablas, permisos, sincronización y reglas de alertas |
-| `apps-script/TrackingComex.gs` | Lee las planillas cada 15 minutos, carga la base y manda el mail diario de las 8 |
+| `supabase/0002_lugar_carga.sql` | Dónde se carga y depósito |
+| `supabase/0003_mails.sql` | Pasos leídos del mail y la pantalla "Por confirmar" |
+| `apps-script/TrackingComex.gs` | Lee las planillas y el mail cada 15 minutos, carga la base y manda el mail diario de las 8 |
 
 ## Instalación (una sola vez)
 
@@ -52,3 +54,19 @@ entrar con Google con su cuenta de Argreen).
   PROYECCION CARGAS. Quedan afuera Iguazú, Brasil, Chile y Uruguay.
 - Lo que se marca a mano en la app nunca lo pisa la sincronización.
 - Un paso que la planilla muestra hecho pero sin fecha toma la fecha del día en que se detectó.
+
+## Pasos que se leen del mail
+
+Después de cada sincronización el script revisa el Gmail de Valentina:
+
+| Paso | Cómo lo reconoce | |
+| --- | --- | --- |
+| Draft BL enviado | Lourdes o Valentina mandan a un cliente o broker un adjunto "draft … BL"; el CV sale del asunto | solo |
+| Draft BL aprobado | En el hilo "DRAFT - AG nnn" con Reymar, Lourdes o Valentina escriben "aprobado" | solo |
+| Draft BL aprobado | El cliente contesta "ok", "aprobado", etc. después del draft | Por confirmar |
+| Certificado de origen y fito | Reymar manda los originales en el hilo "DRAFT - AG nnn" | solo |
+| BL fechado | Asunto "BL FINAL FECHADO - CV …" | solo |
+
+Sin CV en el asunto, o con un CV que tiene varios lotes y el mail no dice cuál, va a
+"Por confirmar". Lo marcado a mano nunca se pisa. Para revisar de nuevo los últimos
+60 días: ejecutar `reiniciarLecturaMails` en el Apps Script.
