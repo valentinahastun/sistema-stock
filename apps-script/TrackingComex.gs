@@ -506,7 +506,7 @@ function textoPropio(body) {
 // Por el nombre de cada archivo de originales se marca el documento:
 // Archivo que se llama solo con el número de BL o booking de la naviera
 // (MEDUWS173567.pdf, BUA0377068.pdf, COSU6472420940.pdf)
-const CODIGO_BL = /^[A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*(\s*\(\d+\))?\.pdf$/i;
+const CODIGO_BL = /^([A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*|\d{5,10})(\s*\(\d+\))?\.pdf$/i;
 
 const DOCS_DRIVE = [
   { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso'] },
@@ -561,8 +561,11 @@ function leerCarpetas() {
       const c = encontradas.find(x => lote && x.lotes.indexOf(lote) >= 0) ||
                 encontradas.find(x => !x.lotes.length) || (!lote ? encontradas[0] : null);
       if (!c) return;
-      // Si la carpeta tiene una subcarpeta por lote ("A (72 TN)", "B (48 TN)"), se usa esa
-      const delLote = lote ? subcarpetas(c.f, new RegExp('^\\s*(lote\\s*)?' + lote + '(?![A-Za-z])', 'i'))[0] : null;
+      // Si la carpeta tiene una subcarpeta por lote, se usa esa: "B (48 TN)", "Lote B",
+      // o por número de embarque/cruce: lote A = "1ER EMBARQUE", E = "5TO EMBARQUE"
+      const nro = lote ? lote.charCodeAt(0) - 64 : 0;
+      const delLote = lote ? subcarpetas(c.f, new RegExp('^\\s*((lote\\s*)?' + lote + '(?![A-Za-z])|' + nro +
+        '\\s*(er|ro|do|to|vo|mo|no|°|º)?\\s*(embarque|cruce|carga|env[ií]o))', 'i'))[0] : null;
       const base = delLote || c.f;
       carpetas.push({ clave: o.clave, url: base.getUrl() });
       // Archivos de la carpeta de la operación (IP, booking)
