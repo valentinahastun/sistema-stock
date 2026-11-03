@@ -530,14 +530,13 @@ const DRAFTS_DRIVE = [
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: CODIGO_BL, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
-  { re: /^\d{11}_019_|factura|invoice|proforma/i, paso: 'dr_factura' },
+  { re: /^(?!.*proforma).*(^\d{11}_019_|factura|invoice)/i, paso: 'dr_factura' },   // la proforma no cuenta
 ];
 
 // Archivos sueltos en la carpeta de la operación (o del lote)
 const RAIZ_DRIVE = [
   { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|sps[\s_-]*ic/i, paso: 'ip' },
   { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
-  { re: /proforma/i, paso: 'dr_factura' },
   { re: /^ofic_/i, paso: 'ddee' },          // DDEE oficializada
   { re: /^cpe-/i, paso: 'camiones' },       // carta de porte electrónica
 ];
