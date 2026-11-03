@@ -530,12 +530,14 @@ const DRAFTS_DRIVE = [
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: CODIGO_BL, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
+  { re: /^\d{11}_019_|factura|invoice|proforma/i, paso: 'dr_factura' },
 ];
 
 // Archivos sueltos en la carpeta de la operación (o del lote)
 const RAIZ_DRIVE = [
   { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|sps[\s_-]*ic/i, paso: 'ip' },
   { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
+  { re: /proforma/i, paso: 'dr_factura' },
 ];
 
 function leerCarpetas() {
@@ -610,6 +612,7 @@ function leerCarpetas() {
             if (nombraBooking(nombre, o.booking)) pasos.push('doc_bl');
             // Si el BL está en Docus Definitivos, también cuenta como el BL de los drafts
             if (pasos.indexOf('doc_bl') >= 0) pasos.push('dr_bl');
+            if (pasos.indexOf('doc_factura') >= 0 || pasos.indexOf('doc_factura_silver') >= 0) pasos.push('dr_factura');
             pasos.forEach(paso => items.push({
               clave: o.clave, paso, detalle: nombre, url: a.getUrl(),
               fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd'),
