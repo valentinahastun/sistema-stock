@@ -277,6 +277,7 @@ function mailDiario() {
 //      originales (COD - AG nnn.pdf, fito con número de SENASA nnn-AR-XX-...).
 //   4. BL fechado: mail con asunto "BL FINAL FECHADO - CV ...".
 //   5. Originales emitidos: Lourdes o Valentina mandan un adjunto "scan cv 26-...".
+//   6. Envío de documentos: mail de Lourdes o Valentina "ENVIO DOCUMENTACIÓN 26-095".
 //   Para el 1 cuenta cualquier draft de documentos al cliente (draft BL, PREFITO,
 //   ORIGEN - AG nnn, borrador), no solo el BL.
 const MAIL = {
@@ -301,6 +302,7 @@ function leerMails() {
     equipo + ' has:attachment {filename:draft filename:prefito filename:origen filename:scan} ' + despues,
     'subject:"DRAFT - AG" ' + despues,
     'subject:"BL FINAL" ' + despues,
+    equipo + ' subject:envio {subject:documentacion subject:documentos subject:docus} ' + despues,
   ];
   const vistos = {};
   const hilos = [];
@@ -419,6 +421,14 @@ function analizarMensajes(msgs) {
           add(m, 'doc_fito', ag, true, 'Reymar mandó el fito original');
         }
       }
+      return;
+    }
+
+    // 6: envío de documentos ("ENVIO DOCUMENTACIÓN 26-095"), primer mail del hilo
+    if (delEquipo(m) && !/^\s*(re|rv|fw|fwd)\s*:/i.test(m.asunto) &&
+        /env[ií]o\s+(de\s+)?(la\s+)?(documentacion|documentos|docus)/i.test(sinAcentos(m.asunto))) {
+      const cv = cvDeAsunto(m.asunto);
+      add(m, 'envio_docs', cv, !!cv, cv ? 'Mail "' + m.asunto + '"' : 'Envío de documentos sin CV en el asunto');
       return;
     }
 
