@@ -5,11 +5,14 @@ import { getUsuario } from "@/lib/usuario";
 import SinAcceso from "@/components/SinAcceso";
 import PasoEditable from "@/components/PasoEditable";
 import SelectorResponsable from "@/components/SelectorResponsable";
+import Etapas from "@/components/Etapas";
 import {
   type Alerta,
   type Hito,
   type Operacion,
   documentos,
+  enPalabras,
+  etapas,
   estaHecho,
   fecha,
   nombreOperacion,
@@ -107,7 +110,15 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
         </dl>
       </div>
 
+      <div className="bg-white rounded-lg shadow p-5 space-y-3">
+        <div className={"text-base font-medium " + (vencidas ? "text-red-700" : "text-brand-navy")}>
+          {vencidas ? "⚠ " + alertas.filter((a) => a.nivel === "vencida")[0].mensaje : "Ahora: " + enPalabras(o, hechos)}
+        </div>
+        <Etapas etapas={etapas(o, hechos)} alerta={vencidas > 0} />
+      </div>
+
       <div className="bg-white rounded-lg shadow p-5">
+        <h2 className="font-medium text-brand-navy mb-3">Paso a paso</h2>
         <ol>
           {lista.map((p, i) => {
             const e = estado(p.codigo, i);

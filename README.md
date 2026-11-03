@@ -12,7 +12,7 @@ mismos usuarios.
 | `app/`, `components/`, `lib/` | La app (Next.js). Pantallas: Agenda, Operaciones y el tracking de cada operación |
 | `supabase/0001_tracking.sql` | Tablas, permisos, sincronización y reglas de alertas |
 | `supabase/0002_lugar_carga.sql` | Dónde se carga y depósito |
-| `supabase/0003_mails.sql` | Pasos leídos del mail y la pantalla "Por confirmar" |
+| `supabase/0003_mails.sql` a `0006` | Pasos leídos del mail, fecha del booking y pantalla "Del mail" |
 | `apps-script/TrackingComex.gs` | Lee las planillas y el mail cada 15 minutos, carga la base y manda el mail diario de las 8 |
 
 ## Instalación (una sola vez)
@@ -65,10 +65,10 @@ Después de cada sincronización el script revisa el Gmail de Valentina:
 | Originales emitidos | Lourdes o Valentina mandan un adjunto "scan cv 26-…" | solo |
 | Booking (fecha) | El primer mail que nombra el número de booking | solo |
 | Draft BL aprobado | En el hilo "DRAFT - AG nnn" con Reymar, Lourdes o Valentina escriben "aprobado" | solo |
-| Draft BL aprobado | El cliente contesta "ok", "aprobado", etc. después del draft | Por confirmar |
 | Certificado de origen y fito | Reymar manda los originales en el hilo "DRAFT - AG nnn" | solo |
 | BL fechado | Asunto "BL FINAL FECHADO - CV …" | solo |
 
-Sin CV en el asunto, o con un CV que tiene varios lotes y el mail no dice cuál, va a
-"Por confirmar". Lo marcado a mano nunca se pisa. Para revisar de nuevo los últimos
+No se pide confirmar nada: lo que no se puede asignar (sin CV, o un CV con varios
+lotes cuando el mail no dice cuál) se guarda sin aparecer. La pantalla "Del mail"
+muestra lo que se marcó solo. Lo marcado a mano nunca se pisa. Para revisar de nuevo los últimos
 60 días: ejecutar `reiniciarLecturaMails` en el Apps Script.

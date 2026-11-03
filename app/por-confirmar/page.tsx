@@ -33,7 +33,7 @@ export default async function PorConfirmar() {
   const [{ data: pendData }, { data: autoData }, { data: opsData }] = await Promise.all([
     supabase.from("op_mails").select("*").eq("estado", "pendiente").order("fecha", { ascending: false }),
     supabase.from("op_mails").select("*").eq("estado", "aplicado").eq("resuelto_por", "mail")
-      .order("fecha", { ascending: false }).limit(30),
+      .order("fecha", { ascending: false }).limit(50),
     supabase.from("op_operaciones").select("clave, cv, lote, cliente, activa").order("clave"),
   ]);
   const pendientes = (pendData ?? []) as Mail[];
@@ -48,15 +48,17 @@ export default async function PorConfirmar() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-brand-navy">Por confirmar</h1>
+        <h1 className="text-xl font-semibold text-brand-navy">Del mail</h1>
         <p className="text-sm text-gray-500">
-          Mails que parecen un paso de una operación pero no hay certeza. Revisalos y confirmá o descartá.
+          Pasos que el sistema marcó solo leyendo el mail. No hace falta hacer nada: si alguno está mal,
+          entrá a la operación y corregilo.
         </p>
       </div>
 
+      {pendientes.length > 0 && (
       <section className="bg-white rounded-lg shadow">
         <h2 className="px-4 py-3 border-b font-medium text-brand-navy">
-          Pendientes <span className="text-gray-400 font-normal">({pendientes.length})</span>
+          Para revisar <span className="text-gray-400 font-normal">({pendientes.length})</span>
         </h2>
         {pendientes.length === 0 ? (
           <p className="px-4 py-4 text-sm text-gray-500">No hay nada para confirmar.</p>
@@ -96,9 +98,10 @@ export default async function PorConfirmar() {
           </ul>
         )}
       </section>
+      )}
 
       <section className="bg-white rounded-lg shadow">
-        <h2 className="px-4 py-3 border-b font-medium text-brand-navy">Marcado solo desde el mail (últimos 30)</h2>
+        <h2 className="px-4 py-3 border-b font-medium text-brand-navy">Marcado solo desde el mail (últimos 50)</h2>
         {automaticos.length === 0 ? (
           <p className="px-4 py-4 text-sm text-gray-500">Todavía no se marcó nada desde el mail.</p>
         ) : (

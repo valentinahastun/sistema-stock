@@ -7,8 +7,8 @@ import { type Alerta, type Operacion, fecha, nombreOperacion, NOMBRE_RESPONSABLE
 
 export const dynamic = "force-dynamic";
 
-// Agenda: lo que hay que hacer hoy y lo que viene en los próximos días.
-export default async function Agenda({ searchParams }: { searchParams: { resp?: string } }) {
+// Inicio: lo que hay que hacer hoy y lo que viene en los próximos días.
+export default async function Inicio({ searchParams }: { searchParams: { resp?: string } }) {
   const u = await getUsuario();
   if (!u) return null;
   if (!u.acceso) return <SinAcceso email={u.email} />;
@@ -50,8 +50,8 @@ export default async function Agenda({ searchParams }: { searchParams: { resp?: 
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-brand-navy">Agenda</h1>
-          <p className="text-sm text-gray-500">Hoy {fecha(hoy, true)}</p>
+          <h1 className="text-xl font-semibold text-brand-navy">Inicio</h1>
+          <p className="text-sm text-gray-500">Hoy {fecha(hoy, true)} · lo que hay que resolver y lo que viene esta semana</p>
         </div>
         <FiltroResponsable base="/" actual={resp} />
       </div>

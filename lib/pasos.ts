@@ -123,6 +123,62 @@ export function pasoActual(o: Operacion, hechos: Map<string, Hito>): Paso | null
   return lista.slice(ultimo + 1).find((p) => !estaHecho(o, p.codigo, hechos)) ?? null;
 }
 
+// ============================================================
+// Etapas: los pasos agrupados en 6 partes fáciles de entender
+// ============================================================
+export type Etapa = { codigo: string; nombre: string; icono: string; pasos: string[] };
+
+export const ETAPAS: Etapa[] = [
+  { codigo: "contrato", nombre: "Contrato", icono: "📝", pasos: ["firma", "etiqueta", "anticipo", "ip"] },
+  { codigo: "reserva", nombre: "Reserva del barco", icono: "📅", pasos: ["booking"] },
+  { codigo: "carga", nombre: "Carga", icono: "🚛", pasos: ["camiones", "retiro", "consolidado", "ddee"] },
+  { codigo: "documentos", nombre: "Documentos", icono: "📄", pasos: ["draft_enviado", "draft_aprobado", "documentos"] },
+  { codigo: "originales", nombre: "Originales y flete", icono: "🚢", pasos: ["originales", "flete"] },
+  { codigo: "cobro", nombre: "Envío y cobro", icono: "💰", pasos: ["envio_docs", "cobranza"] },
+];
+
+// Qué se está esperando, en palabras simples (para el paso actual).
+export const EN_CURSO: Record<string, string> = {
+  firma: "Esperando el contrato firmado",
+  etiqueta: "Falta aprobar la etiqueta",
+  anticipo: "Esperando el anticipo del cliente",
+  ip: "Esperando el permiso de importación (IP)",
+  booking: "Falta confirmar el barco (booking)",
+  camiones: "Falta cargar los camiones en planta",
+  retiro: "Falta retirar los contenedores",
+  consolidado: "Falta consolidar en el depósito",
+  ddee: "Falta aprobar el permiso de embarque",
+  draft_enviado: "Falta mandar los borradores al cliente",
+  draft_aprobado: "Esperando que el cliente apruebe los borradores",
+  documentos: "Juntando los documentos finales",
+  originales: "Falta emitir los originales",
+  flete: "Falta pagar el flete y liberar el BL",
+  envio_docs: "Falta enviar los documentos",
+  cobranza: "Esperando el cobro",
+};
+
+export type EstadoEtapa = "hecha" | "actual" | "pendiente";
+
+export function etapas(o: Operacion, hechos: Map<string, Hito>) {
+  const aplican = new Set(pasos(o).map((p) => p.codigo));
+  const actual = pasoActual(o, hechos);
+  const lista = ETAPAS.map((e) => {
+    const ps = e.pasos.filter((p) => aplican.has(p));
+    const listos = ps.filter((p) => estaHecho(o, p, hechos)).length;
+    return { ...e, total: ps.length, listos };
+  });
+  const iActual = actual ? lista.findIndex((e) => e.pasos.includes(actual.codigo)) : lista.length;
+  return lista.map((e, i) => ({
+    ...e,
+    estado: (i < iActual ? "hecha" : i === iActual ? "actual" : "pendiente") as EstadoEtapa,
+  }));
+}
+
+export function enPalabras(o: Operacion, hechos: Map<string, Hito>) {
+  const a = pasoActual(o, hechos);
+  return a ? EN_CURSO[a.codigo] ?? a.nombre : "Operación terminada";
+}
+
 // Todos los pasos que se pueden marcar (para elegir en "Por confirmar").
 export const PASOS_MARCABLES: Paso[] = [
   { codigo: "firma", nombre: "Contrato firmado" },

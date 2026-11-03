@@ -3,15 +3,16 @@ import { createClient } from "@/lib/supabase/server";
 import { getUsuario } from "@/lib/usuario";
 import SinAcceso from "@/components/SinAcceso";
 import FiltroResponsable from "@/components/FiltroResponsable";
+import Etapas from "@/components/Etapas";
 import {
   type Alerta,
   type Hito,
   type Operacion,
+  ETAPAS,
+  enPalabras,
+  etapas,
   fecha,
   nombreOperacion,
-  pasoActual,
-  pasos,
-  estaHecho,
   NOMBRE_RESPONSABLE,
 } from "@/lib/pasos";
 
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function Operaciones({
   searchParams,
 }: {
-  searchParams: { resp?: string; q?: string };
+  searchParams: { resp?: string; q?: string; etapa?: string };
 }) {
   const u = await getUsuario();
   if (!u) return null;
@@ -28,6 +29,7 @@ export default async function Operaciones({
 
   const resp = searchParams.resp ?? "todas";
   const q = (searchParams.q ?? "").trim().toLowerCase();
+  const etapaSel = searchParams.etapa ?? "";
   const supabase = createClient();
 
   const [{ data: ops }, { data: hitos }, { data: alertas }] = await Promise.all([
@@ -41,29 +43,54 @@ export default async function Operaciones({
     if (!porOp.has(h.clave)) porOp.set(h.clave, new Map());
     porOp.get(h.clave)!.set(h.paso, h);
   });
-  const alertasPorOp = new Map<string, { v: number; p: number }>();
+  const alertasPorOp = new Map<string, Alerta[]>();
   ((alertas ?? []) as Alerta[]).forEach((a) => {
-    const x = alertasPorOp.get(a.clave) ?? { v: 0, p: 0 };
-    if (a.nivel === "vencida") x.v++;
-    else x.p++;
-    alertasPorOp.set(a.clave, x);
+    alertasPorOp.set(a.clave, [...(alertasPorOp.get(a.clave) ?? []), a]);
   });
 
-  let lista = (ops ?? []) as Operacion[];
-  if (resp !== "todas") lista = lista.filter((o) => o.responsable === resp);
+  let base = (ops ?? []) as Operacion[];
+  if (resp !== "todas") base = base.filter((o) => o.responsable === resp);
   if (q) {
-    lista = lista.filter((o) =>
+    base = base.filter((o) =>
       [o.clave, o.cv, o.cliente, o.destino, o.producto, o.booking].some((x) => (x ?? "").toLowerCase().includes(q))
     );
   }
 
+  const filas = base.map((o) => {
+    const h = porOp.get(o.clave) ?? new Map<string, Hito>();
+    const et = etapas(o, h);
+    const actual = et.find((e) => e.estado === "actual");
+    const al = alertasPorOp.get(o.clave) ?? [];
+    return { o, et, etapaActual: actual?.codigo ?? "terminada", ahora: enPalabras(o, h), al };
+  });
+
+  // Cuántas hay en cada etapa (para los recuadros de arriba)
+  const cuenta = new Map<string, number>();
+  filas.forEach((f) => cuenta.set(f.etapaActual, (cuenta.get(f.etapaActual) ?? 0) + 1));
+
+  const lista = (etapaSel ? filas.filter((f) => f.etapaActual === etapaSel) : filas).sort((a, b) => {
+    // Primero las que tienen algo vencido, después por ETA
+    const va = a.al.some((x) => x.nivel === "vencida") ? 0 : 1;
+    const vb = b.al.some((x) => x.nivel === "vencida") ? 0 : 1;
+    if (va !== vb) return va - vb;
+    return (a.o.eta ?? "9999") < (b.o.eta ?? "9999") ? -1 : 1;
+  });
+
+  const link = (extra: Record<string, string>) => {
+    const p = new URLSearchParams({ resp, ...(q ? { q } : {}), ...extra });
+    return `/operaciones?${p.toString()}`;
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-brand-navy">
-          Operaciones abiertas <span className="text-gray-400 font-normal text-base">({lista.length})</span>
-        </h1>
-        <div className="flex items-center gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-brand-navy">Operaciones abiertas</h1>
+          <p className="text-sm text-gray-500">
+            Cada operación es una venta (CV). La barra muestra en qué etapa está, del contrato al cobro.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
           <form action="/operaciones" className="flex">
             <input type="hidden" name="resp" value={resp} />
             <input
@@ -77,62 +104,84 @@ export default async function Operaciones({
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b bg-brand-green-light">
-              <th className="px-4 py-2">Operación</th>
-              <th className="px-4 py-2">Cliente</th>
-              <th className="px-4 py-2">Destino</th>
-              <th className="px-4 py-2">Avance</th>
-              <th className="px-4 py-2">Próximo paso</th>
-              <th className="px-4 py-2">ETA</th>
-              <th className="px-4 py-2">Alertas</th>
-              <th className="px-4 py-2">Responsable</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lista.map((o) => {
-              const h = porOp.get(o.clave) ?? new Map<string, Hito>();
-              const total = pasos(o);
-              const hechos = total.filter((p) => estaHecho(o, p.codigo, h)).length;
-              const actual = pasoActual(o, h);
-              const al = alertasPorOp.get(o.clave);
-              return (
-                <tr key={o.clave} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <Link href={`/operaciones/${encodeURIComponent(o.clave)}`} className="text-brand-navy font-medium hover:underline">
-                      {nombreOperacion(o)}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 max-w-[180px] truncate" title={o.cliente ?? ""}>{o.cliente ?? "—"}</td>
-                  <td className="px-4 py-2 max-w-[160px] truncate" title={o.destino ?? ""}>{o.destino ?? "—"}</td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-20 h-1.5 rounded bg-gray-200 overflow-hidden">
-                        <div className="h-full bg-brand-green" style={{ width: `${(hechos / total.length) * 100}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-500">{hechos}/{total.length}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">{actual?.nombre ?? "Terminada"}</td>
-                  <td className="px-4 py-2 whitespace-nowrap">{fecha(o.eta)}</td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    {al?.v ? <span className="text-xs rounded px-2 py-0.5 bg-red-100 text-red-800 mr-1">{al.v}</span> : null}
-                    {al?.p ? <span className="text-xs rounded px-2 py-0.5 bg-amber-100 text-amber-800">{al.p}</span> : null}
-                    {!al && <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-2">{o.responsable ? NOMBRE_RESPONSABLE[o.responsable] : <span className="text-amber-700">Sin asignar</span>}</td>
-                </tr>
-              );
-            })}
-            {lista.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">No hay operaciones para este filtro.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      {/* Cuántas operaciones hay en cada etapa */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {ETAPAS.map((e) => {
+          const n = cuenta.get(e.codigo) ?? 0;
+          const activo = etapaSel === e.codigo;
+          return (
+            <Link
+              key={e.codigo}
+              href={activo ? link({}) : link({ etapa: e.codigo })}
+              className={
+                "rounded-lg border p-3 text-center transition " +
+                (activo ? "bg-brand-navy text-white border-brand-navy" : "bg-white hover:border-brand-navy")
+              }
+            >
+              <div className="text-2xl" aria-hidden="true">{e.icono}</div>
+              <div className={"text-2xl font-semibold " + (activo ? "" : "text-brand-navy")}>{n}</div>
+              <div className={"text-xs " + (activo ? "text-gray-200" : "text-gray-500")}>{e.nombre}</div>
+            </Link>
+          );
+        })}
+      </div>
+      {etapaSel && (
+        <p className="text-sm">
+          Mostrando solo las que están en <b>{ETAPAS.find((e) => e.codigo === etapaSel)?.nombre}</b>.{" "}
+          <Link href={link({})} className="underline text-brand-navy">Ver todas</Link>
+        </p>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {lista.map(({ o, et, ahora, al }) => {
+          const vencidas = al.filter((a) => a.nivel === "vencida");
+          const proximas = al.filter((a) => a.nivel === "proxima");
+          return (
+            <Link
+              key={o.clave}
+              href={`/operaciones/${encodeURIComponent(o.clave)}`}
+              className={
+                "block bg-white rounded-lg shadow p-4 border-l-4 hover:shadow-md transition " +
+                (vencidas.length ? "border-red-500" : proximas.length ? "border-amber-400" : "border-brand-green")
+              }
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold text-brand-navy">{nombreOperacion(o)}</div>
+                  <div className="text-sm text-gray-700 truncate" title={o.cliente ?? ""}>{o.cliente ?? "Cliente sin cargar"}</div>
+                </div>
+                <span className="text-xs text-gray-500 whitespace-nowrap">
+                  {o.responsable ? NOMBRE_RESPONSABLE[o.responsable] : "Sin asignar"}
+                </span>
+              </div>
+
+              <div className="text-xs text-gray-500 mt-1 truncate">
+                {[o.producto, o.tn ? `${Number(o.tn)} tn` : null].filter(Boolean).join(" · ") || "—"}
+                {" → "}
+                {o.destino ?? "destino sin cargar"}
+              </div>
+
+              <div className="mt-3">
+                <Etapas etapas={et} chica alerta={vencidas.length > 0} />
+              </div>
+
+              <div className={"mt-2 text-sm " + (vencidas.length ? "text-red-700 font-medium" : "text-gray-800")}>
+                {vencidas.length ? "⚠ " + vencidas[0].mensaje : ahora}
+              </div>
+              {!vencidas.length && proximas.length > 0 && (
+                <div className="text-xs text-amber-700 mt-0.5">⏰ {proximas[0].mensaje}</div>
+              )}
+
+              <div className="flex justify-between text-xs text-gray-500 mt-3 pt-2 border-t">
+                <span>Sale: {o.etd ? fecha(o.etd) : "—"}</span>
+                <span>Llega: {o.eta ? fecha(o.eta) : "—"}</span>
+              </div>
+            </Link>
+          );
+        })}
+        {lista.length === 0 && (
+          <p className="text-gray-400 text-sm col-span-full text-center py-6">No hay operaciones para este filtro.</p>
+        )}
       </div>
     </div>
   );

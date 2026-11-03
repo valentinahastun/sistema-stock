@@ -261,13 +261,12 @@ function mailDiario() {
 // ============================================================
 // LECTURA DEL MAIL
 // ============================================================
-// Reglas (solo las que se pueden reconocer sin dudas; lo dudoso va a "Por confirmar"):
+// Reglas (solo las que se pueden reconocer sin dudas). Lo que no se puede asignar
+// (sin CV, o CV con varios lotes sin letra) se guarda pero no se pide confirmar.
 //   1. Draft BL enviado: Lourdes o Valentina mandan a un cliente o broker (no a un
 //      proveedor) un adjunto que se llama "draft ... BL". El CV sale del asunto.
 //   2. Draft aprobado: en el hilo "DRAFT - AG nnn" de Reymar, Lourdes o Valentina
 //      escriben "aprobado/s" (piden avanzar con originales).
-//      Si en el hilo con el cliente, después del draft, el cliente contesta "ok",
-//      "aprobado", etc., queda en Por confirmar (puede ser por otra cosa).
 //   3. Certificado de origen y fito: en el hilo "DRAFT - AG nnn", Reymar manda los
 //      originales (COD - AG nnn.pdf, fito con número de SENASA nnn-AR-XX-...).
 //   4. BL fechado: mail con asunto "BL FINAL FECHADO - CV ...".
@@ -438,12 +437,6 @@ function analizarMensajes(msgs) {
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
         : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
-      // Respuesta del cliente en el mismo hilo
-      const resp = (porHilo[m.hilo] || []).find(x => x.fecha > m.fecha && esCliente(x.de) && MAIL.APROBACION_CLIENTE.test(x.texto));
-      if (resp) {
-        add(resp, 'draft_aprobado', cv, false, 'El cliente respondió "' + (resp.texto.match(MAIL.APROBACION_CLIENTE) || [''])[0] +
-          '" después del draft. Revisá que sea por el draft');
-      }
     }
   });
 

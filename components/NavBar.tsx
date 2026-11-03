@@ -25,10 +25,10 @@ export default async function NavBar() {
           <span className="text-sm font-semibold">Operaciones Comex</span>
           {u.acceso && (
             <nav className="flex gap-4 text-sm">
-              <Link href="/" className="hover:text-brand-green">Agenda</Link>
+              <Link href="/" className="hover:text-brand-green">Inicio</Link>
               <Link href="/operaciones" className="hover:text-brand-green">Operaciones</Link>
               <Link href="/por-confirmar" className="hover:text-brand-green">
-                Por confirmar
+                Del mail
                 {pendientes > 0 && (
                   <span className="ml-1 rounded-full bg-amber-400 text-brand-navy text-xs font-semibold px-1.5">{pendientes}</span>
                 )}

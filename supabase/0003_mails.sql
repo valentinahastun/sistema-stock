@@ -120,7 +120,7 @@ begin
                   when (select count(*) from op_operaciones where cv = r.cv) > 1 then ' · hay varios lotes de ' || r.cv || ', elegí cuál'
                   else ' · no encontré la operación ' || r.cv || coalesce(r.lote, '')
                 end,
-              'pendiente');
+              'descartado');
       v_pendientes := v_pendientes + 1;
     end if;
   end loop;
