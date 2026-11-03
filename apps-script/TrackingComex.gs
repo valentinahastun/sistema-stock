@@ -532,6 +532,12 @@ const DRAFTS_DRIVE = [
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
 ];
 
+// Archivos sueltos en la carpeta de la operación (o del lote)
+const RAIZ_DRIVE = [
+  { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|sps[\s_-]*ic/i, paso: 'ip' },
+  { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
+];
+
 function leerCarpetas() {
   const ops = rpc('op_activas_token', { p_token: prop('TOKEN_SYNC') });
   const porCv = {};
@@ -555,8 +561,25 @@ function leerCarpetas() {
       const c = encontradas.find(x => lote && x.lotes.indexOf(lote) >= 0) ||
                 encontradas.find(x => !x.lotes.length) || (!lote ? encontradas[0] : null);
       if (!c) return;
-      carpetas.push({ clave: o.clave, url: c.f.getUrl() });
-      subcarpetas(c.f, /docus\s*expo/i).forEach(expo => {
+      // Si la carpeta tiene una subcarpeta por lote ("A (72 TN)", "B (48 TN)"), se usa esa
+      const delLote = lote ? subcarpetas(c.f, new RegExp('^\\s*(lote\\s*)?' + lote + '(?![A-Za-z])', 'i'))[0] : null;
+      const base = delLote || c.f;
+      carpetas.push({ clave: o.clave, url: base.getUrl() });
+      // Archivos de la carpeta de la operación (IP, booking)
+      [c.f].concat(delLote ? [delLote] : []).forEach(carp => {
+        const fs = carp.getFiles();
+        while (fs.hasNext()) {
+          const a = fs.next();
+          const nombre = a.getName();
+          const otro = nombre.toUpperCase().match(/(?:AG\s*\d{3}|\d{2}-\d{3})\s?([A-Z])(?![A-Z])/);
+          if (otro && lote && otro[1] !== lote) continue;
+          RAIZ_DRIVE.forEach(d => {
+            if (d.re.test(nombre)) items.push({ clave: o.clave, paso: d.paso, detalle: nombre, url: a.getUrl(),
+              fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
+          });
+        }
+      });
+      subcarpetas(base, /docus\s*expo/i).forEach(expo => {
         const sueltos = expo.getFiles();
         while (sueltos.hasNext()) {
           const a = sueltos.next();
@@ -670,4 +693,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE, DRAFTS_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
