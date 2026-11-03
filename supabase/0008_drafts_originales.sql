@@ -79,7 +79,7 @@ as $$
     union all
     -- Draft BL: 2 días sin respuesta del cliente
     select o.*, 'draft_aprobado', 'vencida',
-      'Draft BL sin respuesta del cliente hace ' || (o.hoy - o.f_draft_env) || ' días',
+      'Drafts sin respuesta del cliente hace ' || (o.hoy - o.f_draft_env) || ' días',
       o.f_draft_env + 2, true
     from o where o.draft_env and not o.draft_ok and o.f_draft_env is not null
       and o.hoy - o.f_draft_env >= 2
