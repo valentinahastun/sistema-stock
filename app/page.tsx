@@ -51,7 +51,7 @@ export default async function Inicio({ searchParams }: { searchParams: { resp?: 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-brand-navy">Inicio</h1>
-          <p className="text-sm text-gray-500">Hoy {fecha(hoy, true)} · lo que hay que resolver y lo que viene esta semana</p>
+          <p className="text-sm text-gray-500">Hoy {fecha(hoy, true)}</p>
         </div>
         <FiltroResponsable base="/" actual={resp} />
       </div>
