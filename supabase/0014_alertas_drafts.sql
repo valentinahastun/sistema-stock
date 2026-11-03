@@ -87,14 +87,14 @@ as $$
       case when o.hoy - o.f_draft_bl >= 2 then 'vencida' else 'proxima' end,
       'Mandar drafts al cliente: el draft de BL llegó hace ' || (o.hoy - o.f_draft_bl) || ' días',
       o.f_draft_bl + 2, true
-    from o where not o.draft_env and not o.draft_ok and o.f_draft_bl is not null
+    from o where not o.draft_env and not o.draft_ok and not o.originales and o.f_draft_bl is not null
       and o.hoy - o.f_draft_bl >= 1
     union all
     -- Consultar aprobación: todos los días desde que se mandaron hasta que se aprueban
     select o.*, 'draft_aprobado', 'vencida',
       'Consultar aprobación de drafts: enviados hace ' || (o.hoy - o.f_draft_env) || ' días',
       o.f_draft_env + 1, true
-    from o where o.draft_env and not o.draft_ok and o.f_draft_env is not null
+    from o where o.draft_env and not o.draft_ok and not o.originales and o.f_draft_env is not null
       and o.hoy - o.f_draft_env >= 1
     union all
     -- Originales: a las 48 hs de la aprobación de drafts
