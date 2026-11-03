@@ -102,7 +102,11 @@ export default async function Operaciones({
       </div>
 
       {/* Cuántas operaciones hay en cada etapa */}
-      <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm p-2 flex flex-wrap">
+      <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm p-2">
+        <p className="px-3 pt-1 pb-1 text-xs text-slate-500">
+          Cuántas operaciones están en cada etapa (todavía les falta algo de esa etapa). Tocá una para ver cuáles son.
+        </p>
+        <div className="flex flex-wrap">
         {ETAPAS.map((e, i) => {
           const n = cuenta.get(e.codigo) ?? 0;
           const activo = etapaSel === e.codigo;
@@ -121,13 +125,15 @@ export default async function Operaciones({
               <span className="leading-tight">
                 <span className="block text-lg font-semibold text-slate-800">{n}</span>
                 <span className="block text-[11px] text-slate-500">
-                  <span className="text-slate-300">{i + 1}.</span> {e.nombre}
+                  en <span className="text-slate-300">{i + 1}.</span> {e.nombre}
                 </span>
               </span>
             </Link>
           );
         })}
       </div>
+      </div>
+
       {etapaSel && (
         <p className="text-sm text-slate-600">
           Mostrando solo las que están en <b>{ETAPAS.find((e) => e.codigo === etapaSel)?.nombre}</b> ·{" "}
