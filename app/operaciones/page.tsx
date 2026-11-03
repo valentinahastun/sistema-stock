@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUsuario } from "@/lib/usuario";
 import SinAcceso from "@/components/SinAcceso";
 import FiltroResponsable from "@/components/FiltroResponsable";
-import TarjetaOperacion from "@/components/TarjetaOperacion";
+import TablaOperaciones from "@/components/TablaOperaciones";
 import {
   type Alerta,
   type Hito,
@@ -84,7 +84,7 @@ export default async function Operaciones({
         <div>
           <h1 className="text-xl font-semibold text-slate-800">Operaciones abiertas</h1>
           <p className="text-sm text-slate-500">
-            Cada operación es una venta (CV). La barra muestra en qué etapa está, del contrato al cobro.
+            Cada operación es una venta (CV). Los puntos muestran en qué etapa está: verde ✓ listo, círculo azul en curso, rojo atrasado.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -135,14 +135,7 @@ export default async function Operaciones({
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {lista.map(({ o, et, ahora, al }) => (
-          <TarjetaOperacion key={o.clave} o={o} et={et} ahora={ahora} al={al} />
-        ))}
-        {lista.length === 0 && (
-          <p className="text-slate-400 text-sm col-span-full text-center py-6">No hay operaciones para este filtro.</p>
-        )}
-      </div>
+      <TablaOperaciones filas={lista} />
     </div>
   );
 }
