@@ -75,7 +75,8 @@ export function drafts(o: Operacion): Paso[] {
     { codigo: "dr_fito", nombre: "Fitosanitario (Reymar)" },
     { codigo: "dr_bl", nombre: "BL (forwarder)" },
     { codigo: "dr_pl", nombre: "Packing list" },
-    { codigo: "dr_factura", nombre: "Factura" },
+    { codigo: "dr_factura", nombre: "Factura Argreen" },
+    ...(o.silver ? [{ codigo: "dr_factura_silver", nombre: "Factura Silver" }] : []),
   ];
 }
 
