@@ -538,6 +538,8 @@ const RAIZ_DRIVE = [
   { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|sps[\s_-]*ic/i, paso: 'ip' },
   { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
   { re: /proforma/i, paso: 'dr_factura' },
+  { re: /^ofic_/i, paso: 'ddee' },          // DDEE oficializada
+  { re: /^cpe-/i, paso: 'camiones' },       // carta de porte electrónica
 ];
 
 function leerCarpetas() {
