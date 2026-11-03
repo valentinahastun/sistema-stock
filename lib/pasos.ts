@@ -61,6 +61,9 @@ export const pideIp = (o: Operacion) =>
 
 export const esCopyDocs = (o: Operacion) => /cop/i.test(o.payment_terms ?? "");
 
+// BL telex o impreso en destino: el BL se libera recién cuando paga el cliente.
+export const liberaAlCobrar = (o: Operacion) => /telex|destino/i.test(o.tipo_bl ?? "");
+
 // Documentos que hay que juntar antes de mandar a emitir originales.
 export function documentos(o: Operacion): Paso[] {
   const lista: Paso[] = [
@@ -95,13 +98,16 @@ export function pasos(o: Operacion): Paso[] {
     { codigo: "documentos", nombre: "Documentos completos", ayuda: "Se guardan en docus expo" },
     { codigo: "originales", nombre: "Originales emitidos", ayuda: "Se guardan en docus definitivos" },
     { codigo: "flete", nombre: "Pago de flete" },
-    { codigo: "liberacion_bl", nombre: "Liberación del BL" },
   );
+  const liberacion = { codigo: "liberacion_bl", nombre: "Liberación del BL" };
   const envio = { codigo: "envio_docs", nombre: "Envío de documentos" };
   const cobro = { codigo: "cobranza", nombre: "Cobranza" };
+  if (!liberaAlCobrar(o)) lista.push(liberacion);
   // CAD: se mandan los documentos y después se cobra. Copy docs: al revés.
   if (esCopyDocs(o)) lista.push(cobro, envio);
   else lista.push(envio, cobro);
+  // Telex o impreso en destino: se libera el BL cuando el cliente pagó.
+  if (liberaAlCobrar(o)) lista.push({ ...liberacion, ayuda: "Con BL telex o impreso en destino se libera cuando paga el cliente" });
   return lista;
 }
 
@@ -164,13 +170,19 @@ export type EstadoEtapa = "hecha" | "actual" | "pendiente";
 export function etapas(o: Operacion, hechos: Map<string, Hito>) {
   const aplican = new Set(pasos(o).map((p) => p.codigo));
   const actual = pasoActual(o, hechos);
+  const alCobrar = liberaAlCobrar(o);
   const lista = ETAPAS.map((e) => {
-    const ps = e.pasos.filter((p) => aplican.has(p));
+    // Con telex o impreso en destino la liberación del BL pasa a la última etapa
+    const propios =
+      e.codigo === "originales" && alCobrar ? e.pasos.filter((p) => p !== "liberacion_bl")
+      : e.codigo === "cobro" && alCobrar ? [...e.pasos, "liberacion_bl"]
+      : e.pasos;
+    const ps = propios.filter((p) => aplican.has(p));
     const listos = ps.filter((p) => estaHecho(o, p, hechos)).length;
-    return { ...e, total: ps.length, listos };
+    return { ...e, ps, total: ps.length, listos };
   });
-  const iActual = actual ? lista.findIndex((e) => e.pasos.includes(actual.codigo)) : lista.length;
-  return lista.map((e, i) => ({
+  const iActual = actual ? lista.findIndex((e) => e.ps.includes(actual.codigo)) : lista.length;
+  return lista.map(({ ps: _ps, ...e }, i) => ({
     ...e,
     estado: (i < iActual ? "hecha" : i === iActual ? "actual" : "pendiente") as EstadoEtapa,
   }));
