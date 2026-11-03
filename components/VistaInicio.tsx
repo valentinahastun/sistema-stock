@@ -9,8 +9,10 @@ const GRUPOS: { paso: string; titulo: string; icono: string }[] = [
   { paso: "anticipo", titulo: "Anticipos por cobrar", icono: "💵" },
   { paso: "ip", titulo: "IP por emitir", icono: "📑" },
   { paso: "retiro", titulo: "Calidad sin Apto", icono: "🧪" },
-  { paso: "draft_aprobado", titulo: "Drafts sin respuesta", icono: "📄" },
+  { paso: "draft_enviado", titulo: "Drafts para mandar al cliente", icono: "📤" },
+  { paso: "draft_aprobado", titulo: "Consultar aprobación de drafts", icono: "📄" },
   { paso: "originales", titulo: "Originales pendientes", icono: "📦" },
+  { paso: "gmo", titulo: "GMO pendiente", icono: "🧬" },
   { paso: "flete", titulo: "Pago de flete", icono: "🚢" },
   { paso: "cobranza", titulo: "Cobranzas", icono: "💰" },
 ];

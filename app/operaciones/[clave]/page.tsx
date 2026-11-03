@@ -45,7 +45,8 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
   const hechos = new Map<string, Hito>();
   ((hitosData ?? []) as Hito[]).forEach((h) => hechos.set(h.paso, h));
   const alertas = ((alertasData ?? []) as Alerta[]).filter((a) => a.clave === clave);
-  const alertaDe = new Map(alertas.map((a) => [a.paso, a]));
+  // La alerta de GMO se muestra en "Originales completos"
+  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso, a]));
 
   const lista = pasos(o);
   let ultimoHecho = -1;
@@ -147,7 +148,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                   {a && (
                     <div className={"text-xs " + (a.nivel === "vencida" ? "text-red-700" : "text-amber-700")}>{a.mensaje}</div>
                   )}
-                  {e === "sin_registro" && !listaDe(o, p.codigo) && (
+                  {e === "sin_registro" && !listaDe(o, p.codigo, hechos) && (
                     <div className="text-xs text-gray-400">No quedó registrado (la operación ya avanzó)</div>
                   )}
                   {!a && e !== "hecho" && p.ayuda && e !== "sin_registro" && <div className="text-xs text-gray-400">{p.ayuda}</div>}
@@ -168,8 +169,8 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                     </div>
                   )}
 
-                  {listaDe(o, p.codigo) && (() => {
-                    const docs = listaDe(o, p.codigo)!;
+                  {listaDe(o, p.codigo, hechos) && (() => {
+                    const docs = listaDe(o, p.codigo, hechos)!;
                     const listos = docs.filter((d) => hechos.has(d.codigo)).length;
                     return (
                       <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2">

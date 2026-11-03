@@ -285,6 +285,9 @@ const MAIL = {
   PROVEEDORES: ['argreen.com.ar', 'reymar', 'cargostaff', 'isbargentina', 'fiscalessanmartin', 'splushipping',
     'americanashipping', 'interborders', 'rucalogistics', 'loginetsa', 'defibe', 'censersa',
     'forwarding.com.ar', 'beyonders', 'biofixagri', 'controlunion', 'glog.com.ar'],
+  // Forwarders: mandan el draft de BL
+  FORWARDERS: ['cargostaff', 'interborders', 'splushipping', 'americanashipping', 'forwarding.com.ar',
+    'beyonders', 'glog.com.ar', 'rucalogistics', 'loginetsa', 'transcargo'],
   DIAS_PRIMERA_VEZ: 60,
   APROBACION_CLIENTE: /\b(ok|okay|aprobad[oa]s?|approved?|confirmad[oa]s?|conformes?|all good|looks good|fine)\b/i,
 };
@@ -302,6 +305,7 @@ function leerMails() {
     equipo + ' has:attachment {filename:draft filename:prefito filename:origen filename:scan} ' + despues,
     'subject:"DRAFT - AG" ' + despues,
     'subject:"BL FINAL" ' + despues,
+    '{' + MAIL.FORWARDERS.map(f => 'from:' + f).join(' ') + '} {draft borrador} ' + despues,
     equipo + ' {subject:envio subject:envío} {subject:documentacion subject:documentación subject:documentos subject:docus} ' + despues,
     equipo + ' subject:apertura subject:cobranza ' + despues,
     '-from:argreen.com.ar {approved aprobados aprobado "proceder con originales" "proceed to the originals" "proceed with the originals"} ' + despues,
@@ -322,7 +326,8 @@ function leerMails() {
     const de = direcciones(m.getFrom())[0] || '';
     const texto = textoPropio(m.getPlainBody() || '');
     // Los adjuntos tardan en leerse: solo cuando pueden servir
-    const verAdjuntos = MAIL.EQUIPO.indexOf(de) >= 0 || (/reymar/i.test(de) && /original/i.test(texto));
+    const verAdjuntos = MAIL.EQUIPO.indexOf(de) >= 0 || /reymar/i.test(de) ||
+      (MAIL.FORWARDERS.some(f => de.indexOf(f) >= 0) && /draft|borrador/i.test(m.getSubject() + ' ' + texto));
     msgs.push({
       id: m.getId(),
       hilo: h.getId(),
@@ -417,12 +422,25 @@ function analizarMensajes(msgs) {
       if (delEquipo(m) && /aprobad|confirmad|avanzar\s+con\s+(los\s+)?originales/i.test(sinAcentos(m.texto))) {
         add(m, 'draft_aprobado', ag, true, 'Documentos aprobados (hilo con Reymar)');
       }
+      // GMO: Reymar manda el borrador (y después el original) del GMO
+      if (/reymar/i.test(m.de) && m.adjuntos.some(a => /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i.test(a))) {
+        if (/original/i.test(m.texto)) add(m, 'doc_gmo', ag, true, 'Reymar mandó el GMO original');
+        else add(m, 'dr_gmo', ag, true, 'Reymar mandó el borrador del GMO');
+      }
       if (/reymar/i.test(m.de) && /original/i.test(m.texto)) {
         if (m.adjuntos.some(a => /^(cod|origen|co)\b/i.test(a))) add(m, 'doc_co', ag, true, 'Reymar mandó el certificado de origen original');
         if (m.adjuntos.some(a => /\d+-AR-[A-Z]{2}-\d+|fito/i.test(a) && !/prefito/i.test(a))) {
           add(m, 'doc_fito', ag, true, 'Reymar mandó el fito original');
         }
       }
+      return;
+    }
+
+    // 8: el forwarder manda el draft de BL ("DRAFT BL - CV 26-116 ...", o un adjunto "draft ... BL")
+    if (MAIL.FORWARDERS.some(f => m.de.indexOf(f) >= 0) &&
+        (/draft\s*(de\s*)?b\/?l/i.test(m.asunto) || m.adjuntos.some(esAdjuntoDraftBl))) {
+      const cv = cvDeAsunto(m.asunto) || cvDeAsunto(asunto);
+      add(m, 'dr_bl', cv, !!cv, cv ? 'El forwarder mandó el draft de BL (' + m.de + ')' : 'Draft de BL sin CV en el asunto');
       return;
     }
 
@@ -561,6 +579,7 @@ const DOCS_DRIVE = [
   { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
   { re: /\d+-AR-[A-Z]{2}-\d+|^fito/i, pasos: ['doc_fito'] },
   { re: /^pl\b|packing/i, pasos: ['doc_pl'] },
+  { re: /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i, pasos: ['doc_gmo'] },
   { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
   { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading/i, pasos: ['doc_bl'] },
@@ -576,6 +595,7 @@ const DRAFTS_DRIVE = [
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: CODIGO_BL, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
+  { re: /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i, paso: 'dr_gmo' },
   { re: /^(?!.*(proforma|silver)).*(^\d{11}_019_|factura|invoice)/i, paso: 'dr_factura' },   // la proforma no cuenta
   { re: /silver\s+invoice/i, paso: 'dr_factura_silver' },
 ];

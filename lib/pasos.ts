@@ -67,7 +67,11 @@ export const liberaAlCobrar = (o: Operacion) => /telex|destino/i.test(o.tipo_bl 
 
 // Drafts (borradores) que hay que juntar para mandarle al cliente.
 // Se guardan en la carpeta DOCUS EXPO de la operación.
-export function drafts(o: Operacion): Paso[] {
+// GMO: solo en las operaciones que lo llevan (hay borrador u original de GMO, o se marcó)
+export const pideGmo = (hechos?: Map<string, Hito>) =>
+  !!hechos && ["dr_gmo", "doc_gmo", "gmo_requerido"].some((p) => hechos.has(p));
+
+export function drafts(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
   return [
     { codigo: "dr_peso", nombre: "Peso y calidad (ISB)" },
     { codigo: "dr_fumigacion", nombre: "Fumigación (ISB)" },
@@ -77,11 +81,12 @@ export function drafts(o: Operacion): Paso[] {
     { codigo: "dr_pl", nombre: "Packing list" },
     { codigo: "dr_factura", nombre: "Factura Argreen" },
     ...(o.silver ? [{ codigo: "dr_factura_silver", nombre: "Factura Silver" }] : []),
+    ...(pideGmo(hechos) ? [{ codigo: "dr_gmo", nombre: "GMO (Reymar)" }] : []),
   ];
 }
 
 // Documentos originales. Se guardan en DOCUS EXPO > Docus Definitivos.
-export function documentos(o: Operacion): Paso[] {
+export function documentos(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
   const lista: Paso[] = [
     { codigo: "doc_peso", nombre: "Peso y calidad (ISB)" },
     { codigo: "doc_fumigacion", nombre: "Fumigación (ISB)" },
@@ -92,12 +97,13 @@ export function documentos(o: Operacion): Paso[] {
     { codigo: "doc_factura", nombre: "Factura Argreen" },
   ];
   if (o.silver) lista.push({ codigo: "doc_factura_silver", nombre: "Factura Silver" });
+  if (pideGmo(hechos)) lista.push({ codigo: "doc_gmo", nombre: "GMO (Reymar)" });
   return lista;
 }
 
 // Los dos pasos que son una lista de documentos
-export function listaDe(o: Operacion, codigo: string): Paso[] | null {
-  return codigo === "drafts" ? drafts(o) : codigo === "originales" ? documentos(o) : null;
+export function listaDe(o: Operacion, codigo: string, hechos?: Map<string, Hito>): Paso[] | null {
+  return codigo === "drafts" ? drafts(o, hechos) : codigo === "originales" ? documentos(o, hechos) : null;
 }
 
 export function pasos(o: Operacion): Paso[] {
@@ -135,7 +141,7 @@ export function pasos(o: Operacion): Paso[] {
 // (o por el scan de originales) o si están todos los documentos de la lista.
 export function estaHecho(o: Operacion, codigo: string, hechos: Map<string, Hito>) {
   if (hechos.has(codigo)) return true;
-  const lista = listaDe(o, codigo);
+  const lista = listaDe(o, codigo, hechos);
   return lista ? lista.every((d) => hechos.has(d.codigo)) : false;
 }
 
