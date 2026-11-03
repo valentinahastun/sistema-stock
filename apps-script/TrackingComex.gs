@@ -12,6 +12,9 @@
  *   - leerMails(): después de cada sincronización revisa el mail y marca solos
  *     los pasos que se reconocen sin dudas (draft BL enviado, documentos
  *     aprobados, CO y fito originales, BL fechado). Lo dudoso va a "Por confirmar".
+ *   - leerCarpetas(): cada hora mira la carpeta de Drive de cada operación
+ *     (CV 26-xxx > DOCUS EXPO > Docus Definitivos) y marca los documentos
+ *     originales que ya están ahí.
  *   - mailDiario(): a las 8 manda a Lourdes y Valentina el resumen de alertas.
  *
  * Instalación: ver README. Propiedades del script necesarias:
@@ -55,8 +58,9 @@ const CONFIG = {
 function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('sincronizar').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('leerCarpetas').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('mailDiario').timeBased().everyDays(1).atHour(CONFIG.HORA_MAIL).create();
-  Logger.log('Listo: sincronización cada 15 minutos y mail diario a las ' + CONFIG.HORA_MAIL + ' h.');
+  Logger.log('Listo: sincronización cada 15 minutos, carpetas de Drive cada hora y mail diario a las ' + CONFIG.HORA_MAIL + ' h.');
 }
 
 // ============================================================
@@ -495,6 +499,89 @@ function textoPropio(body) {
 }
 
 // ============================================================
+// CARPETAS DE DRIVE
+// ============================================================
+// Carpeta de la operación ("CV 26-095 120 TN ALUBIA ...") > DOCUS EXPO (drafts)
+// > Docus Definitivos / Docus Originales / Documentos Originales (originales).
+// Por el nombre de cada archivo de originales se marca el documento:
+const DOCS_DRIVE = [
+  { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso', 'doc_calidad'] },
+  { re: /fumigation|fumigaci/i, pasos: ['doc_fumigacion'] },
+  { re: /documentos\s+originales/i, pasos: ['doc_co', 'doc_fito', 'originales'] },
+  { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
+  { re: /\d+-AR-[A-Z]{2}-\d+|^fito/i, pasos: ['doc_fito'] },
+  { re: /^pl\b|packing/i, pasos: ['doc_pl'] },
+  { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
+  { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
+  { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading/i, pasos: ['doc_bl'] },
+];
+
+function leerCarpetas() {
+  const ops = rpc('op_activas_token', { p_token: prop('TOKEN_SYNC') });
+  const porCv = {};
+  ops.forEach(o => (porCv[o.cv] = porCv[o.cv] || []).push(o));
+  const items = [], carpetas = [];
+  const zona = 'America/Argentina/Buenos_Aires';
+
+  Object.keys(porCv).forEach(cv => {
+    const reCv = new RegExp('(^|[^0-9])' + cv.replace('-', '\\s*-\\s*') + '(?![0-9])\\s*([A-Z](?:\\s*[-y,/]\\s*[A-Z])*)?(?![A-Za-z])', 'i');
+    const it = DriveApp.searchFolders('title contains "' + cv + '" and trashed = false');
+    const encontradas = [];
+    while (it.hasNext()) {
+      const f = it.next();
+      const m = f.getName().match(reCv);
+      if (!m || /docus|definitiv|original/i.test(f.getName())) continue;
+      encontradas.push({ f, lotes: (m[2] || '').toUpperCase().replace(/[^A-Z]/g, '').split('') });
+    }
+    porCv[cv].forEach(o => {
+      const lote = (o.lote || '').toUpperCase();
+      // La carpeta de ese lote; si no hay, la que no nombra lotes
+      const c = encontradas.find(x => lote && x.lotes.indexOf(lote) >= 0) ||
+                encontradas.find(x => !x.lotes.length) || (!lote ? encontradas[0] : null);
+      if (!c) return;
+      carpetas.push({ clave: o.clave, url: c.f.getUrl() });
+      subcarpetas(c.f, /docus\s*expo/i).forEach(expo => {
+        subcarpetas(expo, /definitiv|original/i).forEach(def => {
+          const files = def.getFiles();
+          while (files.hasNext()) {
+            const a = files.next();
+            const nombre = a.getName();
+            // Si el archivo nombra otro lote (PL ... 26-088 B, AG 088B), no es de esta operación
+            const otro = nombre.toUpperCase().match(/(?:AG\s*\d{3}|\d{2}-\d{3})\s?([A-Z])(?![A-Z])/);
+            if (otro && lote && otro[1] !== lote) continue;
+            DOCS_DRIVE.forEach(d => {
+              if (!d.re.test(nombre)) return;
+              d.pasos.forEach(paso => items.push({
+                clave: o.clave, paso, detalle: nombre, url: a.getUrl(),
+                fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd'),
+              }));
+            });
+            // El BL a veces se guarda con el número de booking (BUA0377068.pdf)
+            const bk = String(o.booking || '').toUpperCase().split(/[\s,;/]+/).filter(n => n.length >= 6);
+            if (bk.some(n => nombre.toUpperCase().indexOf(n) >= 0)) {
+              items.push({ clave: o.clave, paso: 'doc_bl', detalle: nombre, url: a.getUrl(),
+                fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
+            }
+          }
+        });
+      });
+    });
+  });
+
+  const r = rpc('op_drive', { p_token: prop('TOKEN_SYNC'), p_items: items, p_carpetas: carpetas });
+  Logger.log('Carpetas encontradas: %s de %s operaciones · documentos vistos: %s · pasos marcados: %s',
+    carpetas.length, ops.length, items.length, r.hitos);
+  return r;
+}
+
+function subcarpetas(padre, re) {
+  const out = [];
+  const it = padre.getFolders();
+  while (it.hasNext()) { const f = it.next(); if (re.test(f.getName())) out.push(f); }
+  return out;
+}
+
+// ============================================================
 // UTILIDADES
 // ============================================================
 function rpc(fn, body) {
@@ -552,4 +639,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE };

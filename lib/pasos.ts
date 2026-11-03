@@ -22,6 +22,7 @@ export type Operacion = {
   corte_documental: string | null;
   lugar_carga: string | null;
   deposito: string | null;
+  carpeta_url?: string | null;
   etd: string | null;
   eta: string | null;
   activa: boolean;
@@ -230,6 +231,7 @@ export const NOMBRE_RESPONSABLE: Record<string, string> = {
 export const NOMBRE_FUENTE: Record<string, string> = {
   manual: "a mano",
   mail: "mail",
+  drive: "carpeta de Drive",
   ventas: "VENTAS",
   seguimiento: "Seguimiento",
   proyeccion: "PROYECCION CARGAS",

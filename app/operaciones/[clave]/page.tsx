@@ -79,6 +79,12 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {o.carpeta_url && (
+              <a href={o.carpeta_url} target="_blank" rel="noreferrer"
+                 className="text-sm rounded-lg px-3 py-1.5 ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50">
+                📁 Abrir carpeta
+              </a>
+            )}
             {!o.activa && <span className="text-xs rounded px-2 py-1 bg-gray-100 text-gray-600">Cerrada</span>}
             {vencidas > 0 && (
               <span className="text-xs rounded px-2 py-1 bg-red-100 text-red-800">
@@ -152,7 +158,9 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                       {h.mail_url && (
                         <>
                           {" · "}
-                          <a href={h.mail_url} target="_blank" rel="noreferrer" className="underline">ver mail</a>
+                          <a href={h.mail_url} target="_blank" rel="noreferrer" className="underline">
+                            {h.fuente === "drive" ? "ver archivo" : "ver mail"}
+                          </a>
                         </>
                       )}
                     </div>
@@ -165,7 +173,13 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                         return (
                           <li key={d.codigo} className="flex flex-wrap items-center gap-2 text-sm">
                             <span className={hd ? "text-brand-green-dark" : "text-gray-300"}>{hd ? "✓" : "○"}</span>
-                            <span className={hd ? "" : "text-gray-500"}>{d.nombre}</span>
+                            {hd?.mail_url ? (
+                              <a href={hd.mail_url} target="_blank" rel="noreferrer" className="hover:underline" title={hd.detalle ?? ""}>
+                                {d.nombre}
+                              </a>
+                            ) : (
+                              <span className={hd ? "" : "text-gray-500"}>{d.nombre}</span>
+                            )}
                             {hd?.fecha && <span className="text-xs text-gray-400">{fecha(hd.fecha)}</span>}
                             {puedeEditar && (
                               <PasoEditable clave={o.clave} paso={d.codigo} hecho={!!hd} fechaActual={hd?.fecha ?? null} detalleActual={hd?.detalle ?? null} compacto />

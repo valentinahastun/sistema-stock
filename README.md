@@ -12,6 +12,7 @@ mismos usuarios.
 | `app/`, `components/`, `lib/` | La app (Next.js). Pantallas: Agenda, Operaciones y el tracking de cada operación |
 | `supabase/0001_tracking.sql` | Tablas, permisos, sincronización y reglas de alertas |
 | `supabase/0002_lugar_carga.sql` | Dónde se carga y depósito |
+| `supabase/0007_drive.sql` | Documentos leídos de las carpetas de Drive |
 | `supabase/0003_mails.sql` a `0006` | Pasos leídos del mail, fecha del booking y pantalla "Del mail" |
 | `apps-script/TrackingComex.gs` | Lee las planillas y el mail cada 15 minutos, carga la base y manda el mail diario de las 8 |
 
@@ -72,3 +73,13 @@ No se pide confirmar nada: lo que no se puede asignar (sin CV, o un CV con vario
 lotes cuando el mail no dice cuál) se guarda sin aparecer. La pantalla "Del mail"
 muestra lo que se marcó solo. Lo marcado a mano nunca se pisa. Para revisar de nuevo los últimos
 60 días: ejecutar `reiniciarLecturaMails` en el Apps Script.
+
+## Documentos desde Drive
+
+Cada hora el script busca la carpeta de cada operación ("CV 26-xxx ...") y adentro
+DOCUS EXPO > Docus Definitivos (o Docus/Documentos Originales). Por el nombre de los
+archivos marca: certificado de peso y calidad (QUALITY_ WEIGHT), fumigación,
+CO y fito ("DOCUMENTOS ORIGINALES - AG nnn", que además marca Originales emitidos),
+packing list (PL), factura Argreen (30702409310_019_...), factura Silver, BL (HBL,
+COPY_, o el número de booking). La fecha es la del día en que se subió el archivo.
+En la operación aparece el botón "Abrir carpeta".
