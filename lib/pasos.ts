@@ -130,7 +130,7 @@ export type Etapa = { codigo: string; nombre: string; icono: string; pasos: stri
 
 export const ETAPAS: Etapa[] = [
   { codigo: "contrato", nombre: "Contrato", icono: "📝", pasos: ["firma", "etiqueta", "anticipo", "ip"] },
-  { codigo: "reserva", nombre: "Reserva del barco", icono: "📅", pasos: ["booking"] },
+  { codigo: "reserva", nombre: "Reserva del booking", icono: "📅", pasos: ["booking"] },
   { codigo: "carga", nombre: "Carga", icono: "🚛", pasos: ["camiones", "retiro", "consolidado", "ddee"] },
   { codigo: "documentos", nombre: "Documentos", icono: "📄", pasos: ["draft_enviado", "draft_aprobado", "documentos"] },
   { codigo: "originales", nombre: "Originales y flete", icono: "🚢", pasos: ["originales", "flete"] },
