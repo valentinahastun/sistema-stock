@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUsuario } from "@/lib/usuario";
 import SinAcceso from "@/components/SinAcceso";
 import FiltroResponsable from "@/components/FiltroResponsable";
-import Etapas from "@/components/Etapas";
+import TarjetaOperacion from "@/components/TarjetaOperacion";
 import {
   type Alerta,
   type Hito,
@@ -11,9 +11,6 @@ import {
   ETAPAS,
   enPalabras,
   etapas,
-  fecha,
-  nombreOperacion,
-  NOMBRE_RESPONSABLE,
 } from "@/lib/pasos";
 
 export const dynamic = "force-dynamic";
@@ -85,8 +82,8 @@ export default async function Operaciones({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-brand-navy">Operaciones abiertas</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-xl font-semibold text-slate-800">Operaciones abiertas</h1>
+          <p className="text-sm text-slate-500">
             Cada operación es una venta (CV). La barra muestra en qué etapa está, del contrato al cobro.
           </p>
         </div>
@@ -105,8 +102,8 @@ export default async function Operaciones({
       </div>
 
       {/* Cuántas operaciones hay en cada etapa */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        {ETAPAS.map((e) => {
+      <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm p-2 flex flex-wrap">
+        {ETAPAS.map((e, i) => {
           const n = cuenta.get(e.codigo) ?? 0;
           const activo = etapaSel === e.codigo;
           return (
@@ -114,73 +111,36 @@ export default async function Operaciones({
               key={e.codigo}
               href={activo ? link({}) : link({ etapa: e.codigo })}
               className={
-                "rounded-lg border p-3 text-center transition " +
-                (activo ? "bg-brand-navy text-white border-brand-navy" : "bg-white hover:border-brand-navy")
+                "flex-1 min-w-[120px] flex items-center gap-3 rounded-xl px-3 py-2.5 transition " +
+                (activo ? "bg-sky-50 ring-1 ring-sky-200" : "hover:bg-slate-50")
               }
             >
-              <div className="text-2xl" aria-hidden="true">{e.icono}</div>
-              <div className={"text-2xl font-semibold " + (activo ? "" : "text-brand-navy")}>{n}</div>
-              <div className={"text-xs " + (activo ? "text-gray-200" : "text-gray-500")}>{e.nombre}</div>
+              <span className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-base shrink-0" aria-hidden="true">
+                {e.icono}
+              </span>
+              <span className="leading-tight">
+                <span className="block text-lg font-semibold text-slate-800">{n}</span>
+                <span className="block text-[11px] text-slate-500">
+                  <span className="text-slate-300">{i + 1}.</span> {e.nombre}
+                </span>
+              </span>
             </Link>
           );
         })}
       </div>
       {etapaSel && (
-        <p className="text-sm">
-          Mostrando solo las que están en <b>{ETAPAS.find((e) => e.codigo === etapaSel)?.nombre}</b>.{" "}
-          <Link href={link({})} className="underline text-brand-navy">Ver todas</Link>
+        <p className="text-sm text-slate-600">
+          Mostrando solo las que están en <b>{ETAPAS.find((e) => e.codigo === etapaSel)?.nombre}</b> ·{" "}
+          <Link href={link({})} className="underline text-sky-700">ver todas</Link>
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {lista.map(({ o, et, ahora, al }) => {
-          const vencidas = al.filter((a) => a.nivel === "vencida");
-          const proximas = al.filter((a) => a.nivel === "proxima");
-          return (
-            <Link
-              key={o.clave}
-              href={`/operaciones/${encodeURIComponent(o.clave)}`}
-              className={
-                "block bg-white rounded-lg shadow p-4 border-l-4 hover:shadow-md transition " +
-                (vencidas.length ? "border-red-500" : proximas.length ? "border-amber-400" : "border-brand-green")
-              }
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-semibold text-brand-navy">{nombreOperacion(o)}</div>
-                  <div className="text-sm text-gray-700 truncate" title={o.cliente ?? ""}>{o.cliente ?? "Cliente sin cargar"}</div>
-                </div>
-                <span className="text-xs text-gray-500 whitespace-nowrap">
-                  {o.responsable ? NOMBRE_RESPONSABLE[o.responsable] : "Sin asignar"}
-                </span>
-              </div>
-
-              <div className="text-xs text-gray-500 mt-1 truncate">
-                {[o.producto, o.tn ? `${Number(o.tn)} tn` : null].filter(Boolean).join(" · ") || "—"}
-                {" → "}
-                {o.destino ?? "destino sin cargar"}
-              </div>
-
-              <div className="mt-3">
-                <Etapas etapas={et} chica alerta={vencidas.length > 0} />
-              </div>
-
-              <div className={"mt-2 text-sm " + (vencidas.length ? "text-red-700 font-medium" : "text-gray-800")}>
-                {vencidas.length ? "⚠ " + vencidas[0].mensaje : ahora}
-              </div>
-              {!vencidas.length && proximas.length > 0 && (
-                <div className="text-xs text-amber-700 mt-0.5">⏰ {proximas[0].mensaje}</div>
-              )}
-
-              <div className="flex justify-between text-xs text-gray-500 mt-3 pt-2 border-t">
-                <span>Sale: {o.etd ? fecha(o.etd) : "—"}</span>
-                <span>Llega: {o.eta ? fecha(o.eta) : "—"}</span>
-              </div>
-            </Link>
-          );
-        })}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {lista.map(({ o, et, ahora, al }) => (
+          <TarjetaOperacion key={o.clave} o={o} et={et} ahora={ahora} al={al} />
+        ))}
         {lista.length === 0 && (
-          <p className="text-gray-400 text-sm col-span-full text-center py-6">No hay operaciones para este filtro.</p>
+          <p className="text-slate-400 text-sm col-span-full text-center py-6">No hay operaciones para este filtro.</p>
         )}
       </div>
     </div>

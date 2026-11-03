@@ -94,7 +94,8 @@ export function pasos(o: Operacion): Paso[] {
     { codigo: "draft_aprobado", nombre: "Draft BL aprobado", ayuda: "Alerta a los 2 días sin respuesta" },
     { codigo: "documentos", nombre: "Documentos completos", ayuda: "Se guardan en docus expo" },
     { codigo: "originales", nombre: "Originales emitidos", ayuda: "Se guardan en docus definitivos" },
-    { codigo: "flete", nombre: "Pago de flete y liberación del BL" },
+    { codigo: "flete", nombre: "Pago de flete" },
+    { codigo: "liberacion_bl", nombre: "Liberación del BL" },
   );
   const envio = { codigo: "envio_docs", nombre: "Envío de documentos" };
   const cobro = { codigo: "cobranza", nombre: "Cobranza" };
@@ -133,7 +134,7 @@ export const ETAPAS: Etapa[] = [
   { codigo: "reserva", nombre: "Reserva del booking", icono: "📅", pasos: ["booking"] },
   { codigo: "carga", nombre: "Carga", icono: "🚛", pasos: ["camiones", "retiro", "consolidado", "ddee"] },
   { codigo: "documentos", nombre: "Documentos", icono: "📄", pasos: ["draft_enviado", "draft_aprobado", "documentos"] },
-  { codigo: "originales", nombre: "Originales y flete", icono: "🚢", pasos: ["originales", "flete"] },
+  { codigo: "originales", nombre: "Originales, flete y BL", icono: "🚢", pasos: ["originales", "flete", "liberacion_bl"] },
   { codigo: "cobro", nombre: "Envío y cobro", icono: "💰", pasos: ["envio_docs", "cobranza"] },
 ];
 
@@ -152,7 +153,8 @@ export const EN_CURSO: Record<string, string> = {
   draft_aprobado: "Esperando que el cliente apruebe los borradores",
   documentos: "Juntando los documentos finales",
   originales: "Falta emitir los originales",
-  flete: "Falta pagar el flete y liberar el BL",
+  flete: "Falta pagar el flete",
+  liberacion_bl: "Falta que liberen el BL",
   envio_docs: "Falta enviar los documentos",
   cobranza: "Esperando el cobro",
 };
@@ -202,7 +204,8 @@ export const PASOS_MARCABLES: Paso[] = [
   { codigo: "doc_factura", nombre: "Factura Argreen" },
   { codigo: "doc_factura_silver", nombre: "Factura Silver" },
   { codigo: "originales", nombre: "Originales emitidos" },
-  { codigo: "flete", nombre: "Pago de flete y liberación del BL" },
+  { codigo: "flete", nombre: "Pago de flete" },
+  { codigo: "liberacion_bl", nombre: "Liberación del BL" },
   { codigo: "envio_docs", nombre: "Envío de documentos" },
   { codigo: "cobranza", nombre: "Cobranza" },
 ];

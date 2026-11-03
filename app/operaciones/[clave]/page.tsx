@@ -110,11 +110,12 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
         </dl>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-5 space-y-3">
-        <div className={"text-base font-medium " + (vencidas ? "text-red-700" : "text-brand-navy")}>
-          {vencidas ? "⚠ " + alertas.filter((a) => a.nivel === "vencida")[0].mensaje : "Ahora: " + enPalabras(o, hechos)}
-        </div>
+      <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm p-5 space-y-5">
         <Etapas etapas={etapas(o, hechos)} alerta={vencidas > 0} />
+        <div className={"rounded-lg px-4 py-2.5 text-sm flex gap-2 " + (vencidas ? "bg-rose-50 text-rose-700" : "bg-sky-50 text-sky-800")}>
+          <span aria-hidden="true">{vencidas ? "⚠️" : "👉"}</span>
+          <span>{vencidas ? alertas.filter((a) => a.nivel === "vencida")[0].mensaje : "Ahora: " + enPalabras(o, hechos)}</span>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow p-5">
