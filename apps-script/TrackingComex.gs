@@ -504,6 +504,10 @@ function textoPropio(body) {
 // Carpeta de la operación ("CV 26-095 120 TN ALUBIA ...") > DOCUS EXPO (drafts)
 // > Docus Definitivos / Docus Originales / Documentos Originales (originales).
 // Por el nombre de cada archivo de originales se marca el documento:
+// Archivo que se llama solo con el número de BL o booking de la naviera
+// (MEDUWS173567.pdf, BUA0377068.pdf, COSU6472420940.pdf)
+const CODIGO_BL = /^[A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*(\s*\(\d+\))?\.pdf$/i;
+
 const DOCS_DRIVE = [
   { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso'] },
   { re: /fumigation|fumigaci/i, pasos: ['doc_fumigacion'] },
@@ -514,6 +518,7 @@ const DOCS_DRIVE = [
   { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
   { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading/i, pasos: ['doc_bl'] },
+  { re: CODIGO_BL, pasos: ['doc_bl'] },
 ];
 
 // Drafts: archivos sueltos en DOCUS EXPO (no en las subcarpetas)
@@ -523,6 +528,7 @@ const DRAFTS_DRIVE = [
   { re: /^origen\b|origen\s*-\s*ag/i, paso: 'dr_co' },
   { re: /fito/i, paso: 'dr_fito' },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
+  { re: CODIGO_BL, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
 ];
 
