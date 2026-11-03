@@ -522,7 +522,7 @@ const DRAFTS_DRIVE = [
   { re: /fumigation|fumigaci/i, paso: 'dr_fumigacion' },
   { re: /^origen\b|origen\s*-\s*ag/i, paso: 'dr_co' },
   { re: /fito/i, paso: 'dr_fito' },
-  { re: /draft.*(^|[^a-z])bl([^a-z]|$)|(^|[^a-z])h?bl([^a-z]|$)/i, paso: 'dr_bl' },
+  { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
 ];
 
@@ -561,6 +561,9 @@ function leerCarpetas() {
             if (d.re.test(nombre)) items.push({ clave: o.clave, paso: d.paso, detalle: nombre, url: a.getUrl(),
               fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
           });
+          // El BL a veces se guarda con el número de booking (BUA0377068.pdf)
+          if (nombraBooking(nombre, o.booking)) items.push({ clave: o.clave, paso: 'dr_bl', detalle: nombre, url: a.getUrl(),
+            fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
         }
         subcarpetas(expo, /definitiv|original/i).forEach(def => {
           const files = def.getFiles();
@@ -570,19 +573,15 @@ function leerCarpetas() {
             // Si el archivo nombra otro lote (PL ... 26-088 B, AG 088B), no es de esta operación
             const otro = nombre.toUpperCase().match(/(?:AG\s*\d{3}|\d{2}-\d{3})\s?([A-Z])(?![A-Z])/);
             if (otro && lote && otro[1] !== lote) continue;
-            DOCS_DRIVE.forEach(d => {
-              if (!d.re.test(nombre)) return;
-              d.pasos.forEach(paso => items.push({
-                clave: o.clave, paso, detalle: nombre, url: a.getUrl(),
-                fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd'),
-              }));
-            });
-            // El BL a veces se guarda con el número de booking (BUA0377068.pdf)
-            const bk = String(o.booking || '').toUpperCase().split(/[\s,;/]+/).filter(n => n.length >= 6);
-            if (bk.some(n => nombre.toUpperCase().indexOf(n) >= 0)) {
-              items.push({ clave: o.clave, paso: 'doc_bl', detalle: nombre, url: a.getUrl(),
-                fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
-            }
+            const pasos = [];
+            DOCS_DRIVE.forEach(d => { if (d.re.test(nombre)) d.pasos.forEach(p => pasos.push(p)); });
+            if (nombraBooking(nombre, o.booking)) pasos.push('doc_bl');
+            // Si el BL está en Docus Definitivos, también cuenta como el BL de los drafts
+            if (pasos.indexOf('doc_bl') >= 0) pasos.push('dr_bl');
+            pasos.forEach(paso => items.push({
+              clave: o.clave, paso, detalle: nombre, url: a.getUrl(),
+              fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd'),
+            }));
           }
         });
       });
@@ -593,6 +592,11 @@ function leerCarpetas() {
   Logger.log('Carpetas encontradas: %s de %s operaciones · documentos vistos: %s · pasos marcados: %s',
     carpetas.length, ops.length, items.length, r.hitos);
   return r;
+}
+
+function nombraBooking(nombre, booking) {
+  const bk = String(booking || '').toUpperCase().split(/[\s,;/]+/).filter(n => n.length >= 6 && /\d{5,}/.test(n));
+  return bk.some(n => String(nombre).toUpperCase().indexOf(n) >= 0);
 }
 
 function subcarpetas(padre, re) {
