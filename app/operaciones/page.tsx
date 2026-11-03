@@ -83,9 +83,6 @@ export default async function Operaciones({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">Operaciones abiertas</h1>
-          <p className="text-sm text-slate-500">
-            Cada operación es una venta (CV). Los puntos muestran en qué etapa está: verde ✓ listo, círculo azul en curso, rojo atrasado.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <form action="/operaciones" className="flex">
