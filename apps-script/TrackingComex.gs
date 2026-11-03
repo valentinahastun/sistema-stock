@@ -302,7 +302,7 @@ function leerMails() {
     equipo + ' has:attachment {filename:draft filename:prefito filename:origen filename:scan} ' + despues,
     'subject:"DRAFT - AG" ' + despues,
     'subject:"BL FINAL" ' + despues,
-    equipo + ' subject:envio {subject:documentacion subject:documentos subject:docus} ' + despues,
+    equipo + ' {subject:envio subject:envío} {subject:documentacion subject:documentación subject:documentos subject:docus} ' + despues,
   ];
   const vistos = {};
   const hilos = [];
@@ -424,11 +424,15 @@ function analizarMensajes(msgs) {
       return;
     }
 
-    // 6: envío de documentos ("ENVIO DOCUMENTACIÓN 26-095"), primer mail del hilo
+    // 6: envío de documentos, primer mail del hilo. Asuntos reales:
+    //    "ENVIO DOCUMENTACIÓN 26-095", "ENVIO DOCUMENTOS AG 096", "ENVIO DOCUMENTOS LB 077",
+    //    "ENVIO LEGJO DOCUMENTOS CV 26-084", "Envio documentos CV 26-088 "B" y "D""
     if (delEquipo(m) && !/^\s*(re|rv|fw|fwd)\s*:/i.test(m.asunto) &&
-        /env[ií]o\s+(de\s+)?(la\s+)?(documentacion|documentos|docus)/i.test(sinAcentos(m.asunto))) {
-      const cv = cvDeAsunto(m.asunto);
-      add(m, 'envio_docs', cv, !!cv, cv ? 'Mail "' + m.asunto + '"' : 'Envío de documentos sin CV en el asunto');
+        /envio\s+(de\s+)?(la\s+)?(\w+\s+)?(documentacion|documentos|docus)/i.test(sinAcentos(m.asunto))) {
+      const cvs = cvsDeEnvio(m.asunto, m.fecha);
+      if (!cvs.length) add(m, 'envio_docs', null, false, 'Envío de documentos sin CV en el asunto');
+      cvs.forEach(cv => add(Object.assign({}, m, { id: m.id + (cv.lote ? '-' + cv.lote : '') }), 'envio_docs', cv, true,
+        'Mail "' + m.asunto + '"'));
       return;
     }
 
@@ -480,6 +484,23 @@ function cvDeAsunto(s) {
   const m = t.match(new RegExp('CV\\s*(2\\d)\\s*-\\s*(\\d{3})' + lote)) ||
             t.match(new RegExp('(?:^|[^0-9])(2\\d)\\s*-\\s*(\\d{3})(?![0-9])' + lote));
   return m ? { cv: m[1] + '-' + m[2], lote: m[3] || '' } : null;
+}
+
+// CV de un mail de envío de documentos: "CV 26-095", "26-095", "AG 096", "LB 077",
+// y varios lotes: 'CV 26-088 "B" y "D"' -> 26-088B y 26-088D
+function cvsDeEnvio(asunto, fecha) {
+  const t = String(asunto).toUpperCase();
+  let base = cvDeAsunto(t);
+  if (!base) {
+    const m = t.match(/(?:AG|LB)\s*(\d{3})\s*([A-Z])?(?![A-Z0-9])/);
+    if (m) {
+      const anio = new Date(fecha).getFullYear() % 100;
+      base = { cv: anio + '-' + m[1], lote: m[2] || '', alt: (anio - 1) + '-' + m[1] };
+    }
+  }
+  if (!base) return [];
+  const lotes = (t.match(/"([A-Z])"/g) || []).map(x => x.replace(/"/g, ''));
+  return lotes.length ? lotes.map(l => Object.assign({}, base, { lote: l })) : [base];
 }
 
 // "DRAFT - AG 088B" -> CV 26-088 lote B. El año no figura: se toma el del mail y,
@@ -714,4 +735,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
