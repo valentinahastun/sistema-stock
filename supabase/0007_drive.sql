@@ -136,9 +136,10 @@ begin
   where o.clave = c.clave and o.carpeta_url is distinct from c.url;
 
   insert into op_hitos as h (clave, paso, fecha, fuente, detalle, mail_url, updated_by, updated_at)
-  select x.clave, x.paso, x.fecha, 'drive', left(x.detalle, 200), x.url, 'drive', now()
+  select distinct on (x.clave, x.paso) x.clave, x.paso, x.fecha, 'drive', left(x.detalle, 200), x.url, 'drive', now()
   from jsonb_to_recordset(coalesce(p_items, '[]')) as x(clave text, paso text, fecha date, detalle text, url text)
   join op_operaciones o on o.clave = x.clave
+  order by x.clave, x.paso, x.fecha
   on conflict (clave, paso) do update set
     fecha = excluded.fecha, fuente = 'drive', detalle = excluded.detalle,
     mail_url = excluded.mail_url, updated_by = 'drive', updated_at = now()
