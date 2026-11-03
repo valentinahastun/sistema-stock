@@ -13,8 +13,8 @@
  *     los pasos que se reconocen sin dudas (draft BL enviado, documentos
  *     aprobados, CO y fito originales, BL fechado). Lo dudoso va a "Por confirmar".
  *   - leerCarpetas(): cada hora mira la carpeta de Drive de cada operación
- *     (CV 26-xxx > DOCUS EXPO > Docus Definitivos) y marca los documentos
- *     originales que ya están ahí.
+ *     (CV 26-xxx > DOCUS EXPO > Docus Definitivos) y marca los drafts
+ *     y los documentos originales que ya están ahí.
  *   - mailDiario(): a las 8 manda a Lourdes y Valentina el resumen de alertas.
  *
  * Instalación: ver README. Propiedades del script necesarias:
@@ -505,15 +505,25 @@ function textoPropio(body) {
 // > Docus Definitivos / Docus Originales / Documentos Originales (originales).
 // Por el nombre de cada archivo de originales se marca el documento:
 const DOCS_DRIVE = [
-  { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso', 'doc_calidad'] },
+  { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso'] },
   { re: /fumigation|fumigaci/i, pasos: ['doc_fumigacion'] },
-  { re: /documentos\s+originales/i, pasos: ['doc_co', 'doc_fito', 'originales'] },
+  { re: /documentos\s+originales/i, pasos: ['doc_co', 'doc_fito'] },
   { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
   { re: /\d+-AR-[A-Z]{2}-\d+|^fito/i, pasos: ['doc_fito'] },
   { re: /^pl\b|packing/i, pasos: ['doc_pl'] },
   { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
   { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading/i, pasos: ['doc_bl'] },
+];
+
+// Drafts: archivos sueltos en DOCUS EXPO (no en las subcarpetas)
+const DRAFTS_DRIVE = [
+  { re: /quality.*weight|weight.*quality/i, paso: 'dr_peso' },
+  { re: /fumigation|fumigaci/i, paso: 'dr_fumigacion' },
+  { re: /^origen\b|origen\s*-\s*ag/i, paso: 'dr_co' },
+  { re: /fito/i, paso: 'dr_fito' },
+  { re: /draft.*(^|[^a-z])bl([^a-z]|$)|(^|[^a-z])h?bl([^a-z]|$)/i, paso: 'dr_bl' },
+  { re: /^pl\b|packing/i, paso: 'dr_pl' },
 ];
 
 function leerCarpetas() {
@@ -541,6 +551,17 @@ function leerCarpetas() {
       if (!c) return;
       carpetas.push({ clave: o.clave, url: c.f.getUrl() });
       subcarpetas(c.f, /docus\s*expo/i).forEach(expo => {
+        const sueltos = expo.getFiles();
+        while (sueltos.hasNext()) {
+          const a = sueltos.next();
+          const nombre = a.getName();
+          const otro = nombre.toUpperCase().match(/(?:AG\s*\d{3}|\d{2}-\d{3})\s?([A-Z])(?![A-Z])/);
+          if (otro && lote && otro[1] !== lote) continue;
+          DRAFTS_DRIVE.forEach(d => {
+            if (d.re.test(nombre)) items.push({ clave: o.clave, paso: d.paso, detalle: nombre, url: a.getUrl(),
+              fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
+          });
+        }
         subcarpetas(expo, /definitiv|original/i).forEach(def => {
           const files = def.getFiles();
           while (files.hasNext()) {
@@ -639,4 +660,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, DOCS_DRIVE, DRAFTS_DRIVE };

@@ -9,7 +9,7 @@ const CORTO: Record<string, string> = {
   contrato: "Contrato",
   reserva: "Booking",
   carga: "Carga",
-  documentos: "Documentos",
+  documentos: "Drafts",
   originales: "Originales",
   cobro: "Cobro",
 };

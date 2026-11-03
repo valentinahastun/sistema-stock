@@ -52,7 +52,7 @@ export default function PasoEditable({
           (hecho ? "border-gray-200 text-gray-500 hover:bg-gray-50" : "border-brand-green text-brand-green-dark hover:bg-brand-green-light")
         }
       >
-        {hecho ? "Editar" : compacto ? "Hecho" : "Marcar hecho"}
+        {hecho ? "Editar" : compacto ? "Marcar" : "Marcar hecho"}
       </button>
     );
   }

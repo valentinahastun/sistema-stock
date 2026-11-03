@@ -10,7 +10,7 @@ import {
   type Alerta,
   type Hito,
   type Operacion,
-  documentos,
+  listaDe,
   enPalabras,
   etapas,
   estaHecho,
@@ -147,7 +147,9 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                   {a && (
                     <div className={"text-xs " + (a.nivel === "vencida" ? "text-red-700" : "text-amber-700")}>{a.mensaje}</div>
                   )}
-                  {e === "sin_registro" && <div className="text-xs text-gray-400">Sin registro (la operación ya avanzó)</div>}
+                  {e === "sin_registro" && !listaDe(o, p.codigo) && (
+                    <div className="text-xs text-gray-400">No quedó registrado (la operación ya avanzó)</div>
+                  )}
                   {!a && e !== "hecho" && p.ayuda && e !== "sin_registro" && <div className="text-xs text-gray-400">{p.ayuda}</div>}
                   {h && (h.detalle || h.fuente) && (
                     <div className="text-xs text-gray-500">
@@ -166,31 +168,42 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                     </div>
                   )}
 
-                  {p.codigo === "documentos" && (
-                    <ul className="mt-2 space-y-1">
-                      {documentos(o).map((d) => {
-                        const hd = hechos.get(d.codigo);
-                        return (
-                          <li key={d.codigo} className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className={hd ? "text-brand-green-dark" : "text-gray-300"}>{hd ? "✓" : "○"}</span>
-                            {hd?.mail_url ? (
-                              <a href={hd.mail_url} target="_blank" rel="noreferrer" className="hover:underline" title={hd.detalle ?? ""}>
-                                {d.nombre}
-                              </a>
-                            ) : (
-                              <span className={hd ? "" : "text-gray-500"}>{d.nombre}</span>
-                            )}
-                            {hd?.fecha && <span className="text-xs text-gray-400">{fecha(hd.fecha)}</span>}
-                            {puedeEditar && (
-                              <PasoEditable clave={o.clave} paso={d.codigo} hecho={!!hd} fechaActual={hd?.fecha ?? null} detalleActual={hd?.detalle ?? null} compacto />
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  {listaDe(o, p.codigo) && (() => {
+                    const docs = listaDe(o, p.codigo)!;
+                    const listos = docs.filter((d) => hechos.has(d.codigo)).length;
+                    return (
+                      <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2">
+                        <div className="text-xs text-slate-500 mb-1.5">
+                          {h ? "Marcado como completo" : `${listos} de ${docs.length} listos`}
+                        </div>
+                        <ul className="space-y-1">
+                          {docs.map((d) => {
+                            const hd = hechos.get(d.codigo);
+                            const ok = !!hd || !!h;
+                            return (
+                              <li key={d.codigo} className="flex flex-wrap items-center gap-2 text-sm">
+                                <span className={ok ? "text-emerald-600" : "text-slate-300"}>{ok ? "✓" : "○"}</span>
+                                {hd?.mail_url ? (
+                                  <a href={hd.mail_url} target="_blank" rel="noreferrer" className="hover:underline" title={hd.detalle ?? ""}>
+                                    {d.nombre}
+                                  </a>
+                                ) : (
+                                  <span className={ok ? "text-slate-700" : "text-slate-400"}>{d.nombre}</span>
+                                )}
+                                {hd?.fecha && <span className="text-xs text-slate-400">{fecha(hd.fecha)}</span>}
+                                {!ok && <span className="text-xs text-slate-400">falta</span>}
+                                {puedeEditar && !h && (
+                                  <PasoEditable clave={o.clave} paso={d.codigo} hecho={!!hd} fechaActual={hd?.fecha ?? null} detalleActual={hd?.detalle ?? null} compacto />
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  })()}
 
-                  {puedeEditar && p.codigo !== "documentos" && (
+                  {puedeEditar && (
                     <div className="mt-1">
                       <PasoEditable clave={o.clave} paso={p.codigo} hecho={!!h} fechaActual={h?.fecha ?? null} detalleActual={h?.detalle ?? null} />
                     </div>

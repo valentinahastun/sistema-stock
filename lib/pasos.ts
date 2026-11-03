@@ -65,12 +65,24 @@ export const esCopyDocs = (o: Operacion) => /cop/i.test(o.payment_terms ?? "");
 // BL telex o impreso en destino: el BL se libera recién cuando paga el cliente.
 export const liberaAlCobrar = (o: Operacion) => /telex|destino/i.test(o.tipo_bl ?? "");
 
-// Documentos que hay que juntar antes de mandar a emitir originales.
+// Drafts (borradores) que hay que juntar para mandarle al cliente.
+// Se guardan en la carpeta DOCUS EXPO de la operación.
+export function drafts(o: Operacion): Paso[] {
+  return [
+    { codigo: "dr_peso", nombre: "Peso y calidad (ISB)" },
+    { codigo: "dr_fumigacion", nombre: "Fumigación (ISB)" },
+    { codigo: "dr_co", nombre: "Certificado de origen (Reymar)" },
+    { codigo: "dr_fito", nombre: "Fitosanitario (Reymar)" },
+    { codigo: "dr_bl", nombre: "BL (forwarder)" },
+    { codigo: "dr_pl", nombre: "Packing list" },
+  ];
+}
+
+// Documentos originales. Se guardan en DOCUS EXPO > Docus Definitivos.
 export function documentos(o: Operacion): Paso[] {
   const lista: Paso[] = [
-    { codigo: "doc_peso", nombre: "Certificado de peso (ISB)" },
-    { codigo: "doc_calidad", nombre: "Certificado de calidad (ISB)" },
-    { codigo: "doc_fumigacion", nombre: "Certificado de fumigación (ISB)" },
+    { codigo: "doc_peso", nombre: "Peso y calidad (ISB)" },
+    { codigo: "doc_fumigacion", nombre: "Fumigación (ISB)" },
     { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
     { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
     { codigo: "doc_bl", nombre: "BL fechado (forwarder)" },
@@ -79,6 +91,11 @@ export function documentos(o: Operacion): Paso[] {
   ];
   if (o.silver) lista.push({ codigo: "doc_factura_silver", nombre: "Factura Silver" });
   return lista;
+}
+
+// Los dos pasos que son una lista de documentos
+export function listaDe(o: Operacion, codigo: string): Paso[] | null {
+  return codigo === "drafts" ? drafts(o) : codigo === "originales" ? documentos(o) : null;
 }
 
 export function pasos(o: Operacion): Paso[] {
@@ -94,10 +111,10 @@ export function pasos(o: Operacion): Paso[] {
     { codigo: "retiro", nombre: "Contenedores retirados" },
     { codigo: "consolidado", nombre: "Consolidado" },
     { codigo: "ddee", nombre: "DDEE aprobada" },
-    { codigo: "draft_enviado", nombre: "Draft BL enviado al cliente" },
-    { codigo: "draft_aprobado", nombre: "Draft BL aprobado", ayuda: "Alerta a los 2 días sin respuesta" },
-    { codigo: "documentos", nombre: "Documentos completos", ayuda: "Se guardan en docus expo" },
-    { codigo: "originales", nombre: "Originales emitidos", ayuda: "Se guardan en docus definitivos" },
+    { codigo: "drafts", nombre: "Drafts completos", ayuda: "Se guardan en DOCUS EXPO" },
+    { codigo: "draft_enviado", nombre: "Drafts enviados al cliente" },
+    { codigo: "draft_aprobado", nombre: "Drafts aprobados por el cliente", ayuda: "Alerta a los 2 días sin respuesta" },
+    { codigo: "originales", nombre: "Originales completos", ayuda: "Se guardan en Docus Definitivos" },
     { codigo: "flete", nombre: "Pago de flete" },
   );
   const liberacion = { codigo: "liberacion_bl", nombre: "Liberación del BL" };
@@ -112,13 +129,12 @@ export function pasos(o: Operacion): Paso[] {
   return lista;
 }
 
-// "Documentos completos" está hecho si se marcó a mano o si están todos los de la lista.
-export function documentosCompletos(o: Operacion, hechos: Map<string, Hito>): boolean {
-  return hechos.has("documentos") || documentos(o).every((d) => hechos.has(d.codigo));
-}
-
+// "Drafts completos" y "Originales completos" están hechos si se marcaron a mano
+// (o por el scan de originales) o si están todos los documentos de la lista.
 export function estaHecho(o: Operacion, codigo: string, hechos: Map<string, Hito>) {
-  return codigo === "documentos" ? documentosCompletos(o, hechos) : hechos.has(codigo);
+  if (hechos.has(codigo)) return true;
+  const lista = listaDe(o, codigo);
+  return lista ? lista.every((d) => hechos.has(d.codigo)) : false;
 }
 
 // El paso en el que está la operación: el primero sin hacer después del último hecho.
@@ -140,7 +156,7 @@ export const ETAPAS: Etapa[] = [
   { codigo: "contrato", nombre: "Contrato", icono: "📝", pasos: ["firma", "etiqueta", "anticipo", "ip"] },
   { codigo: "reserva", nombre: "Reserva del booking", icono: "📅", pasos: ["booking"] },
   { codigo: "carga", nombre: "Carga", icono: "🚛", pasos: ["camiones", "retiro", "consolidado", "ddee"] },
-  { codigo: "documentos", nombre: "Documentos", icono: "📄", pasos: ["draft_enviado", "draft_aprobado", "documentos"] },
+  { codigo: "documentos", nombre: "Drafts", icono: "📄", pasos: ["drafts", "draft_enviado", "draft_aprobado"] },
   { codigo: "originales", nombre: "Originales, flete y BL", icono: "🚢", pasos: ["originales", "flete", "liberacion_bl"] },
   { codigo: "cobro", nombre: "Envío y cobro", icono: "💰", pasos: ["envio_docs", "cobranza"] },
 ];
@@ -156,10 +172,10 @@ export const EN_CURSO: Record<string, string> = {
   retiro: "Falta retirar los contenedores",
   consolidado: "Falta consolidar en el depósito",
   ddee: "Falta aprobar el permiso de embarque",
-  draft_enviado: "Falta mandar los borradores al cliente",
-  draft_aprobado: "Esperando que el cliente apruebe los borradores",
-  documentos: "Juntando los documentos finales",
-  originales: "Falta emitir los originales",
+  drafts: "Faltan drafts para mandarle al cliente",
+  draft_enviado: "Falta mandar los drafts al cliente",
+  draft_aprobado: "Esperando que el cliente apruebe los drafts",
+  originales: "Faltan documentos originales",
   flete: "Falta pagar el flete",
   liberacion_bl: "Falta que liberen el BL",
   envio_docs: "Falta enviar los documentos",
@@ -205,18 +221,17 @@ export const PASOS_MARCABLES: Paso[] = [
   { codigo: "retiro", nombre: "Contenedores retirados" },
   { codigo: "consolidado", nombre: "Consolidado" },
   { codigo: "ddee", nombre: "DDEE aprobada" },
-  { codigo: "draft_enviado", nombre: "Draft BL enviado al cliente" },
-  { codigo: "draft_aprobado", nombre: "Draft BL aprobado" },
-  { codigo: "doc_peso", nombre: "Certificado de peso (ISB)" },
-  { codigo: "doc_calidad", nombre: "Certificado de calidad (ISB)" },
-  { codigo: "doc_fumigacion", nombre: "Certificado de fumigación (ISB)" },
+  { codigo: "draft_enviado", nombre: "Drafts enviados al cliente" },
+  { codigo: "draft_aprobado", nombre: "Drafts aprobados por el cliente" },
+  { codigo: "doc_peso", nombre: "Original: peso y calidad (ISB)" },
+  { codigo: "doc_fumigacion", nombre: "Original: fumigación (ISB)" },
   { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
   { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
   { codigo: "doc_bl", nombre: "BL fechado (forwarder)" },
   { codigo: "doc_pl", nombre: "Packing list" },
   { codigo: "doc_factura", nombre: "Factura Argreen" },
   { codigo: "doc_factura_silver", nombre: "Factura Silver" },
-  { codigo: "originales", nombre: "Originales emitidos" },
+  { codigo: "originales", nombre: "Originales completos" },
   { codigo: "flete", nombre: "Pago de flete" },
   { codigo: "liberacion_bl", nombre: "Liberación del BL" },
   { codigo: "envio_docs", nombre: "Envío de documentos" },
