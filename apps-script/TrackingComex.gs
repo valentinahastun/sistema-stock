@@ -453,7 +453,7 @@ function analizarMensajes(msgs) {
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
 function esAdjuntoDraft(nombre) {
   const n = String(nombre).toLowerCase();
-  return /draft|prefito|borrador|^origen\s*-\s*ag/.test(n) && !/scan/.test(n);
+  return /draft|prefito|borrador|^origen\s*-\s*ag/.test(n) && !/scan|template/.test(n);
 }
 
 function esAdjuntoDraftBl(nombre) {
