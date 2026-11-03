@@ -303,6 +303,7 @@ function leerMails() {
     'subject:"DRAFT - AG" ' + despues,
     'subject:"BL FINAL" ' + despues,
     equipo + ' {subject:envio subject:envío} {subject:documentacion subject:documentación subject:documentos subject:docus} ' + despues,
+    equipo + ' subject:apertura subject:cobranza ' + despues,
   ];
   const vistos = {};
   const hilos = [];
@@ -428,7 +429,8 @@ function analizarMensajes(msgs) {
     //    "ENVIO DOCUMENTACIÓN 26-095", "ENVIO DOCUMENTOS AG 096", "ENVIO DOCUMENTOS LB 077",
     //    "ENVIO LEGJO DOCUMENTOS CV 26-084", "Envio documentos CV 26-088 "B" y "D""
     if (delEquipo(m) && !/^\s*(re|rv|fw|fwd)\s*:/i.test(m.asunto) &&
-        /envio\s+(de\s+)?(la\s+)?(\w+\s+)?(documentacion|documentos|docus)/i.test(sinAcentos(m.asunto))) {
+        (/envio\s+(de\s+)?(la\s+)?(\w+\s+)?(documentacion|documentos|docus)/i.test(sinAcentos(m.asunto)) ||
+         /apertura\s+(de\s+)?cobranza/i.test(sinAcentos(m.asunto)))) {   // cobranza bancaria: los documentos van al banco
       const cvs = cvsDeEnvio(m.asunto, m.fecha);
       if (!cvs.length) add(m, 'envio_docs', null, false, 'Envío de documentos sin CV en el asunto');
       cvs.forEach(cv => add(Object.assign({}, m, { id: m.id + (cv.lote ? '-' + cv.lote : '') }), 'envio_docs', cv, true,
