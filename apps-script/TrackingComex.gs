@@ -197,7 +197,9 @@ function armarDatos(t) {
     o.tn = (v && v.tn) || num(pr && pr('tn'));
     o.payment_terms = txt(v && v.payment);
     o.fecha_contrato = isoOrNull(v && v.fecha);
-    const r = txt(s && s[col(S.resp)]).toUpperCase();
+    // Columna A de SEGUIMIENTO OPERATIVO: L = Lourdes, V = Valentina (manda sobre todo lo demás)
+    const r = sinAcentos(txt(s && s[col(S.resp)])).toUpperCase().charAt(0);
+    o.resp_planilla = r === 'L' || r === 'V';
     o.responsable = r === 'L' ? 'lourdes' : r === 'V' ? 'valentina' : (pro[k] ? pro[k].resp : null);
     o.tipo_bl = txt(s && s[col(S.tipoBl)]);
     o.booking = txt(pr && pr('nBooking')) || txt(s && s[col(S.booking)]);
