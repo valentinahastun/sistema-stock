@@ -282,16 +282,12 @@ function armarMailDiario(alertas, agenda, app, ahora) {
     const i = a.mensaje.indexOf(': ');
     return i > 0 && i < 40 ? a.mensaje.slice(i + 2) : a.mensaje;
   };
-  const chip = r => !r ? '' : '<span style="' + FONT + 'font-size:11px;font-weight:bold;border-radius:10px;padding:2px 8px;' +
-    (r === 'lourdes' ? 'background:#f1ecff;color:#6d4bd1' : 'background:#e6f6f4;color:#0f766e') + '">' +
-    (r === 'lourdes' ? 'Lourdes' : r === 'valentina' ? 'Valentina' : esc(r)) + '</span>';
-
   const urgentes = alertas.filter(a => a.nivel === 'vencida');
   const proximas = alertas.length - urgentes.length;
 
   // Tareas agrupadas; primero las que tienen algo vencido
-  const grupos = TAREAS.map((t, orden) => {
-    const items = alertas.filter(a => a.paso === t.paso)
+  const agrupar = lista => TAREAS.map((t, orden) => {
+    const items = lista.filter(a => a.paso === t.paso)
       .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'vencida' ? -1 : 1));
     return Object.assign({}, t, { orden, items, urgentes: items.filter(a => a.nivel === 'vencida').length });
   }).filter(g => g.items.length)
@@ -312,12 +308,11 @@ function armarMailDiario(alertas, agenda, app, ahora) {
       (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(a) + '</a>' : '<b>' + op(a) + '</b>') +
       ' <span style="color:#475569">· ' + esc(corto(a)) + '</span>' +
       '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + esc(a.cliente || '') + (a.destino ? ' · ' + esc(a.destino) : '') + '</div></td>' +
-      '<td align="right" valign="top" style="white-space:nowrap">' + chip(a.responsable) + '</td>' +
       '</tr></table></td></tr>';
   };
 
   const tarjeta = g =>
-    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3;margin-bottom:14px">' +
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3;margin-bottom:12px">' +
     '<tr><td style="padding:12px 16px;' + FONT + 'font-size:15px;font-weight:bold;color:#0f172a">' +
     g.icono + '&nbsp; ' + g.titulo +
     ' <span style="font-weight:normal;font-size:12px;color:#64748b;background:#f1f5f9;border-radius:10px;padding:2px 8px">' + g.items.length + '</span>' +
@@ -325,20 +320,41 @@ function armarMailDiario(alertas, agenda, app, ahora) {
     '</td></tr>' + g.items.map(fila).join('') + '</table>';
 
   const manana = new Date(dHoy.getTime() + 86400000).toISOString().slice(0, 10);
-  const bloqueAgenda = !agenda.length ? '' :
-    '<div style="' + FONT + 'font-size:13px;font-weight:bold;color:#64748b;margin:22px 0 8px">Hoy y mañana</div>' +
-    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3">' +
-    agenda.map((e, i) => {
+  const bloqueAgenda = lista => !lista.length ? '' :
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3;margin-bottom:12px">' +
+    '<tr><td style="padding:12px 16px;' + FONT + 'font-size:15px;font-weight:bold;color:#0f172a">📅&nbsp; Hoy y mañana</td></tr>' +
+    lista.map(e => {
       const t = AGENDA[e.tipo] || { texto: e.tipo, icono: '•' };
       const url = link(e.clave);
       const cuando = e.dia === hoyIso ? 'Hoy' : e.dia === manana ? 'Mañana' : e.dia;
-      return '<tr><td style="padding:10px 16px;' + (i ? 'border-top:1px solid #f1f5f9;' : '') + FONT + 'font-size:14px;color:#334155">' +
+      return '<tr><td style="padding:10px 16px;border-top:1px solid #f1f5f9;' + FONT + 'font-size:14px;color:#334155">' +
         '<span style="display:inline-block;width:62px;font-weight:bold;color:' + (cuando === 'Hoy' ? '#0369a1' : '#64748b') + '">' + cuando + '</span>' +
         t.icono + ' ' + t.texto + ' · ' +
         (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(e) + '</a>' : '<b>' + op(e) + '</b>') +
-        '<span style="color:#94a3b8"> · ' + esc(e.cliente || '') + '</span></td>' +
-        '<td align="right" style="padding:10px 16px;' + (i ? 'border-top:1px solid #f1f5f9' : '') + '">' + chip(e.responsable) + '</td></tr>';
+        '<span style="color:#94a3b8"> · ' + esc(e.cliente || '') + '</span></td></tr>';
     }).join('') + '</table>';
+
+  // Una sección por persona: Lourdes, Valentina y lo que no tiene responsable
+  const PERSONAS = [
+    { clave: 'lourdes', nombre: 'Lourdes', fondo: '#f1ecff', color: '#6d4bd1' },
+    { clave: 'valentina', nombre: 'Valentina', fondo: '#e6f6f4', color: '#0f766e' },
+    { clave: '', nombre: 'Sin asignar', fondo: '#f1f5f9', color: '#475569' },
+  ];
+  const dePersona = (x, p) => p.clave ? x.responsable === p.clave : (x.responsable !== 'lourdes' && x.responsable !== 'valentina');
+  const seccion = p => {
+    const al = alertas.filter(a => dePersona(a, p));
+    const ag = agenda.filter(e => dePersona(e, p));
+    if (!al.length && !ag.length) return '';
+    const hoyN = al.filter(a => a.nivel === 'vencida').length;
+    const resumen = [hoyN ? hoyN + ' para hoy' : '', al.length - hoyN ? (al.length - hoyN) + ' próximas' : '', ag.length ? ag.length + ' en agenda' : '']
+      .filter(Boolean).join(' · ');
+    return '<div style="margin:26px 0 10px;' + FONT + '">' +
+      '<span style="display:inline-block;background:' + p.fondo + ';color:' + p.color + ';font-size:16px;font-weight:bold;border-radius:12px;padding:6px 14px">' + p.nombre + '</span>' +
+      '<span style="font-size:13px;color:#64748b;margin-left:10px">' + resumen + '</span></div>' +
+      bloqueAgenda(ag) +
+      (al.length ? agrupar(al).map(tarjeta).join('') :
+        '<div style="' + FONT + 'background:#ffffff;border-radius:14px;border:1px solid #eef0f3;padding:14px 16px;font-size:14px;color:#334155">🎉 Sin pendientes.</div>');
+  };
 
   const boton = !app ? '' :
     '<div style="text-align:center;margin:26px 0 8px"><a href="' + app + '" style="' + FONT +
@@ -354,10 +370,8 @@ function armarMailDiario(alertas, agenda, app, ahora) {
     numero(proximas, 'vencen en los próximos días', '#d97706') +
     numero(agenda.length, 'cargas, consolidados y cortes hoy y mañana', '#0369a1') +
     '</tr></table>' +
-    bloqueAgenda +
-    (grupos.length
-      ? '<div style="' + FONT + 'font-size:13px;font-weight:bold;color:#64748b;margin:18px 0 8px">Para hacer</div>' + grupos.map(tarjeta).join('')
-      : '<div style="' + FONT + 'background:#ffffff;border-radius:14px;border:1px solid #eef0f3;padding:22px;text-align:center;font-size:15px;color:#334155;margin-top:14px">🎉 No hay pendientes. Todo al día.</div>') +
+    (alertas.length || agenda.length ? PERSONAS.map(seccion).join('') :
+      '<div style="' + FONT + 'background:#ffffff;border-radius:14px;border:1px solid #eef0f3;padding:22px;text-align:center;font-size:15px;color:#334155;margin-top:14px">🎉 No hay pendientes. Todo al día.</div>') +
     boton +
     '</div></div>';
 
