@@ -93,7 +93,7 @@ export default async function EgresosPage({
   return (
     <div>
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-navy">
-        ← Volver al panel
+        ← Inicio
       </Link>
 
       <h1 className="text-xl font-semibold text-brand-navy mt-2 mb-4">

@@ -82,7 +82,7 @@ export default async function StockPage({
   return (
     <div>
       <Link href="/" className="text-sm text-gray-500 hover:text-brand-navy">
-        ← Volver al panel
+        ← Inicio
       </Link>
 
       <div className="flex items-center justify-between mb-4 mt-2">

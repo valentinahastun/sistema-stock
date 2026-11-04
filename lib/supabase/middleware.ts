@@ -34,8 +34,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  // /auth/callback tiene que poder abrirse sin sesión: ahí se crea la
+  // sesión al volver del login con Google.
+  const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/");
 
-  if (!user && !isLoginPage) {
+  if (!user && !isLoginPage && !isAuthCallback) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

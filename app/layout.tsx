@@ -3,8 +3,8 @@ import "./globals.css";
 import NavBar from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "Sistema de Stock",
-  description: "Gestión de stock multiplanta",
+  title: "Plataforma Argreen",
+  description: "Stock, calidad y operaciones de Argreen",
 };
 
 export default function RootLayout({

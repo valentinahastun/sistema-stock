@@ -1,131 +1,86 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getPerfilActual } from "@/lib/supabase/profile";
+import { getAccesos } from "@/lib/accesos";
+import PortadaVista, { type Modulo, IconoBarco, IconoStock, IconoCalidad } from "@/components/PortadaVista";
 
-export default async function PanelPage() {
+export const dynamic = "force-dynamic";
+
+
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// Portada de la plataforma: un recuadro por módulo con lo principal de cada uno.
+export default async function Portada() {
+  const a = await getAccesos();
+  if (!a) return null;
   const supabase = createClient();
-  const perfil = await getPerfilActual();
-  const esCalidad = perfil?.rol === "calidad";
 
-  const { data: calidad } = await supabase.from("registros_calidad").select("id");
-  const cantCalidad = (calidad ?? []).length;
+  const ahora = new Date(Date.now() - 3 * 3600 * 1000); // Buenos Aires
+  const fechaLarga = `${DIAS[ahora.getUTCDay()]} ${ahora.getUTCDate()} de ${MESES[ahora.getUTCMonth()]}`;
 
-  const tarjetas = [
-    {
-      href: "/calidad",
-      titulo: "Calidad",
-      descripcion: "Calidad de cada lote por planta y producto",
-      valor: `${cantCalidad} registro${cantCalidad === 1 ? "" : "s"}`,
-      color: "bg-amber-50",
-      icono: <IconoCalidad />,
-    },
-  ];
+  const modulos: Modulo[] = [];
 
-  if (!esCalidad) {
+  if (a.operaciones) {
+    const { data } = await supabase.rpc("op_alertas");
+    const alertas = (data ?? []) as { nivel: string; responsable: string | null }[];
+    const mias = a.operaciones.responsable ? alertas.filter((x) => x.responsable === a.operaciones!.responsable) : alertas;
+    const hoy = mias.filter((x) => x.nivel === "vencida").length;
+    const { count } = await supabase.from("op_operaciones").select("clave", { count: "exact", head: true }).eq("activa", true);
+    modulos.push({
+      titulo: "Operaciones",
+      href: "/operaciones",
+      icono: <IconoBarco />,
+      color: "bg-sky-50",
+      numeros: [
+        { valor: String(hoy), texto: a.operaciones.responsable ? "tuyas para resolver hoy" : "para resolver hoy", clase: hoy ? "text-rose-600" : "text-brand-navy" },
+        { valor: String(count ?? 0), texto: "operaciones abiertas" },
+      ],
+      links: [
+        { href: "/operaciones", texto: "Pendientes de hoy" },
+        { href: "/operaciones/lista", texto: "Operaciones abiertas" },
+      ],
+    });
+  }
+
+  if (a.stock) {
     const [{ data: stock }, { data: ingresos }, { data: egresos }] = await Promise.all([
       supabase.from("stock_consolidado").select("stock_disponible_tn"),
       supabase.from("movimientos_stock").select("cantidad").eq("tipo", "ingreso"),
       supabase.from("movimientos_stock").select("cantidad").eq("tipo", "egreso"),
     ]);
-
-    const totalStock = (stock ?? []).reduce((acc, s) => acc + Number(s.stock_disponible_tn), 0);
-    const totalIngresos = (ingresos ?? []).reduce((acc, m) => acc + Number(m.cantidad), 0);
-    const totalEgresos = (egresos ?? []).reduce((acc, m) => acc + Number(m.cantidad), 0);
-
-    tarjetas.unshift({
-      href: "/stock",
+    const suma = (l: { [k: string]: unknown }[] | null, k: string) => (l ?? []).reduce((s, x) => s + Number(x[k]), 0);
+    const tn = (n: number, dec = 1) => n.toLocaleString("es-AR", { maximumFractionDigits: dec });
+    modulos.push({
       titulo: "Stock",
-      descripcion: "Stock disponible por planta y producto",
-      valor: `${totalStock.toFixed(1)} tn`,
-      color: "bg-brand-green-light",
+      href: "/stock",
       icono: <IconoStock />,
+      color: "bg-brand-green-light",
+      numeros: [
+        { valor: `${tn(suma(stock, "stock_disponible_tn"))} tn`, texto: "disponibles" },
+        { valor: `${tn(suma(ingresos, "cantidad"), 0)} / ${tn(suma(egresos, "cantidad"), 0)} tn`, texto: "ingresos / egresos" },
+      ],
+      links: [
+        { href: "/stock", texto: "Stock" },
+        { href: "/ingresos", texto: "Ingresos" },
+        { href: "/egresos", texto: "Egresos" },
+        { href: "/directos", texto: "Directos" },
+      ],
     });
-    tarjetas.push(
-      {
-        href: "/ingresos",
-        titulo: "Ingresos",
-        descripcion: "Todo lo que entró y a qué planta",
-        valor: `${totalIngresos.toFixed(1)} tn`,
-        color: "bg-sky-50",
-        icono: <IconoIngreso />,
-      },
-      {
-        href: "/egresos",
-        titulo: "Egresos",
-        descripcion: "Todo lo que salió, de dónde y para qué",
-        valor: `${totalEgresos.toFixed(1)} tn`,
-        color: "bg-rose-50",
-        icono: <IconoEgreso />,
-      }
-    );
   }
 
-  return (
-    <div>
-      <h1 className="text-xl font-semibold text-brand-navy mb-1">Panel</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Elegí qué querés ver.
-      </p>
+  if (a.calidad) {
+    const { count } = await supabase.from("registros_calidad").select("id", { count: "exact", head: true });
+    modulos.push({
+      titulo: "Calidad",
+      href: "/calidad",
+      icono: <IconoCalidad />,
+      color: "bg-amber-50",
+      numeros: [{ valor: String(count ?? 0), texto: "análisis cargados" }],
+      links: [
+        { href: "/calidad", texto: "Calidad" },
+        ...(a.perfil?.rol === "admin" || a.perfil?.rol === "calidad" ? [{ href: "/calidad/cargar", texto: "Cargar calidad" }] : []),
+      ],
+    });
+  }
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {tarjetas.map((t) => (
-          <Link
-            key={t.href}
-            href={t.href}
-            className="group bg-white rounded-xl shadow hover:shadow-lg transition-shadow p-5 flex items-start gap-4 border border-transparent hover:border-brand-green"
-          >
-            <div className={`rounded-lg p-3 ${t.color}`}>{t.icono}</div>
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-brand-navy group-hover:text-brand-green">
-                  {t.titulo}
-                </h2>
-                <span className="text-lg font-semibold text-brand-navy">{t.valor}</span>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">{t.descripcion}</p>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function IconoStock() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3f9c70" strokeWidth="1.8">
-      <path d="M3 7l9-4 9 4-9 4-9-4z" />
-      <path d="M3 7v10l9 4 9-4V7" />
-      <path d="M12 11v10" />
-    </svg>
-  );
-}
-
-function IconoCalidad() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth="1.8">
-      <path d="M12 2l7 3v6c0 5-3 8-7 11-4-3-7-6-7-11V5l7-3z" />
-      <path d="M9 12l2 2 4-4" />
-    </svg>
-  );
-}
-
-function IconoIngreso() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0369a1" strokeWidth="1.8">
-      <path d="M12 3v12" />
-      <path d="M7 10l5 5 5-5" />
-      <path d="M4 19h16" />
-    </svg>
-  );
-}
-
-function IconoEgreso() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#be123c" strokeWidth="1.8">
-      <path d="M12 15V3" />
-      <path d="M7 8l5-5 5 5" />
-      <path d="M4 19h16" />
-    </svg>
-  );
+  return <PortadaVista nombre={a.nombre} email={a.email} fechaLarga={fechaLarga} modulos={modulos} />;
 }

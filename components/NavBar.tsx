@@ -1,72 +1,69 @@
 import Link from "next/link";
 import Image from "next/image";
-import { getPerfilActual } from "@/lib/supabase/profile";
+import { getAccesos } from "@/lib/accesos";
 import LogoutButton from "@/components/LogoutButton";
+import MenuPrincipal, { type Grupo } from "@/components/MenuPrincipal";
 
 export default async function NavBar() {
-  const perfil = await getPerfilActual();
+  const a = await getAccesos();
+  if (!a) return null;
+  const admin = a.perfil?.rol === "admin";
 
-  if (!perfil) return null;
+  const grupos: Grupo[] = [];
+  if (a.operaciones) {
+    grupos.push({
+      nombre: "Operaciones",
+      base: "/operaciones",
+      items: [
+        { href: "/operaciones", texto: "Inicio" },
+        { href: "/operaciones/lista", texto: "Operaciones abiertas" },
+      ],
+    });
+  }
+  if (a.stock) {
+    grupos.push({
+      nombre: "Stock",
+      base: "/stock|/ingresos|/egresos|/directos|/movimientos|/catalogos|/auditoria",
+      items: [
+        { href: "/stock", texto: "Stock" },
+        { href: "/ingresos", texto: "Ingresos" },
+        { href: "/egresos", texto: "Egresos" },
+        { href: "/directos", texto: "Directos" },
+        ...(admin
+          ? [
+              { href: "/movimientos", texto: "Cargar movimiento" },
+              { href: "/catalogos", texto: "Catálogos" },
+              { href: "/auditoria", texto: "Auditoría" },
+            ]
+          : []),
+      ],
+    });
+  }
+  if (a.calidad) {
+    grupos.push({
+      nombre: "Calidad",
+      base: "/calidad",
+      items: [
+        { href: "/calidad", texto: "Calidad" },
+        ...(admin || a.perfil?.rol === "calidad" ? [{ href: "/calidad/cargar", texto: "Cargar calidad" }] : []),
+      ],
+    });
+  }
 
   return (
     <header className="border-b bg-brand-navy text-white">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-6">
-          <Image src="/logo.png" alt="ARGREEN" width={100} height={29} />
-          <nav className="flex gap-4 text-sm">
-            <Link href="/" className="hover:text-brand-green">
-              Panel
-            </Link>
-            {perfil.rol !== "calidad" && (
-              <Link href="/stock" className="hover:text-brand-green">
-                Stock
-              </Link>
-            )}
-            <Link href="/calidad" className="hover:text-brand-green">
-              Calidad
-            </Link>
-            {(perfil.rol === "admin" || perfil.rol === "calidad") && (
-              <Link href="/calidad/cargar" className="hover:text-brand-green">
-                Cargar calidad
-              </Link>
-            )}
-            {perfil.rol !== "calidad" && (
-              <>
-                <Link href="/ingresos" className="hover:text-brand-green">
-                  Ingresos
-                </Link>
-                <Link href="/egresos" className="hover:text-brand-green">
-                  Egresos
-                </Link>
-                <Link href="/directos" className="hover:text-brand-green">
-                  Directos
-                </Link>
-              </>
-            )}
-            {perfil.rol === "admin" && (
-              <>
-                <Link href="/movimientos" className="hover:text-brand-green">
-                  Cargar movimiento
-                </Link>
-                <Link href="/catalogos" className="hover:text-brand-green">
-                  Catálogos
-                </Link>
-                <Link href="/auditoria" className="hover:text-brand-green">
-                  Auditoría
-                </Link>
-              </>
-            )}
-          </nav>
+          <Link href="/" aria-label="Inicio">
+            <Image src="/logo.png" alt="ARGREEN" width={100} height={29} />
+          </Link>
+          <MenuPrincipal grupos={grupos} />
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-200">
-          <span>
-            {perfil.nombre ?? "Usuario"} ·{" "}
-            {perfil.rol === "admin"
-              ? "Administrador"
-              : perfil.rol === "calidad"
-              ? "Calidad"
-              : "Consulta"}
-          </span>
+          <span>{a.nombre}</span>
+          <Link href="/contrasena" className="text-gray-300 hover:text-white underline">
+            Contraseña
+          </Link>
           <LogoutButton />
         </div>
       </div>

@@ -123,3 +123,12 @@ etapas ya acordadas:
   `imputaciones` ya están creadas, falta la integración y las pantallas.
 
 Cualquier cambio de acá en más lo vamos haciendo sobre este mismo proyecto.
+
+## Plataforma Argreen (rama `plataforma`)
+
+Stock, Calidad y Operaciones Comex en una sola app, con un menú por módulo.
+
+- `/` portada con un recuadro por módulo (cada persona ve solo los suyos).
+- Stock y Calidad: igual que antes (permisos de `profiles`).
+- Operaciones: `/operaciones` (pendientes de hoy), `/operaciones/lista` y `/operaciones/<clave>`
+  (permisos de `op_usuarios`). SQL en `supabase/operaciones/`, Apps Script en `apps-script/`.
