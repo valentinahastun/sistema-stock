@@ -86,7 +86,13 @@ function leerTodo() {
     return ult >= fila ? sh.getRange(fila, 1, ult - fila + 1, sh.getLastColumn()).getValues() : [];
   };
   const proyeccion = {};
-  Object.keys(CONFIG.PRO.hojas).forEach(h => { proyeccion[h] = leer(pro, h, CONFIG.PRO.filaTitulos); });
+  // La fila de títulos se busca sola (la que tiene "CV" en alguna celda), porque
+  // las solapas no siempre la tienen en la misma fila.
+  Object.keys(CONFIG.PRO.hojas).forEach(h => {
+    const filas = leer(pro, h, 1);
+    const iTit = filas.slice(0, 15).findIndex(f => f.some(x => sinAcentos(txt(x)).toLowerCase() === 'cv'));
+    proyeccion[h] = iTit >= 0 ? filas.slice(iTit) : filas.slice(CONFIG.PRO.filaTitulos - 1);
+  });
   return {
     ventas: leer(seg, CONFIG.VEN.hoja, CONFIG.VEN.fila),
     seguimiento: leer(seg, CONFIG.SEG.hoja, CONFIG.SEG.fila),
@@ -308,6 +314,8 @@ function armarMailDiario(alertas, agenda, app, ahora) {
       (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(a) + '</a>' : '<b>' + op(a) + '</b>') +
       ' <span style="color:#475569">· ' + esc(corto(a)) + '</span>' +
       '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + esc(a.cliente || '') + (a.destino ? ' · ' + esc(a.destino) : '') + '</div></td>' +
+      (a.mail_url ? '<td align="right" valign="top" style="white-space:nowrap;padding-left:8px"><a href="' + a.mail_url + '" style="' + FONT +
+        'font-size:12px;color:#0369a1;text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:3px 8px">✉️ Mail</a></td>' : '') +
       '</tr></table></td></tr>';
   };
 
@@ -577,7 +585,8 @@ function analizarMensajes(msgs) {
 
     // 7: el cliente o broker aprueba los drafts ("Drafts have been approved",
     //    "Proceder con originales"). El CV sale del asunto del hilo.
-    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) && !NO_APRUEBA.test(sinAcentos(m.texto))) {
+    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) &&
+        (!NO_APRUEBA.test(sinAcentos(m.texto)) || PROCEDER_ORIGINALES.test(sinAcentos(m.texto)))) {
       const cv = cvDeAsunto(asunto);
       add(m, 'draft_aprobado', cv, !!cv, cv ? 'El cliente aprobó los drafts (' + m.de + ')' : 'Aprobación de drafts sin CV en el asunto');
       return;
@@ -618,6 +627,11 @@ function analizarMensajes(msgs) {
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
 const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
+
+// "Proceder con originales" es aprobación aunque pida algún retoque en el mismo mail
+// ("Solo habría que hacer esas modificaciones y proceder con originales"), salvo que diga
+// que se espera a la corrección ("una vez corregido", "cuando esté", "antes de").
+const PROCEDER_ORIGINALES = /^(?![\s\S]*\b(una vez|cuando|antes de|no)\s+[^.\n]{0,30}(proced|avanz))[\s\S]*\b(proceder|procedan|procede|avanzar|avancen|seguir)\s+con\s+(los\s+)?originales/i;
 
 // Aprobación a medias: "drafts ok! Aguardo el resto de drafts", "falta el fito", "con estas correcciones"
 const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|aguardo\s+(los\s+)?(otros|demas)|falta|faltan|pendiente|correcci|corregir|comentarios|modificar|modificacion)/i;
@@ -892,4 +906,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
