@@ -35,7 +35,7 @@ const CONFIG = {
   HORA_MAIL: 8,
 
   VEN: { hoja: 'VENTAS', fila: 2, fecha: 'A', cv: 'B', firmado: 'C', producto: 'D', tn: 'G',
-         buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
+         buyer: 'K', importador: 'O', payment: 'V', destino: 'X', refCliente: 'Y' },
   SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', consolidado: 'H',
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
          etd: 'AO', eta: 'AP', cobro: 'AX' },
@@ -851,9 +851,22 @@ function mailsPorOperacion() {
   const esCliente = e => e.indexOf('@') > 0 && !esProveedor(e) && !/despachante/i.test(e);
   const porCv = {};
   ops.forEach(o => (porCv[o.cv] = porCv[o.cv] || []).push(o));
+  // N° de contrato del cliente (VENTAS, columna Y: "MC26631"): muchos clientes y brokers
+  // escriben con ese número en el asunto en vez del CV.
+  const ref = {};
+  try {
+    const V = CONFIG.VEN;
+    const sh = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName(V.hoja);
+    sh.getRange(V.fila, 1, sh.getLastRow() - V.fila + 1, sh.getLastColumn()).getValues().forEach(f => {
+      const m = String(f[col(V.cv)]).match(/(\d{2}-\d{3})/);
+      const r = txt(f[col(V.refCliente)]).trim();
+      if (m && r.length >= 5 && /\d{4}/.test(r) && !ref[m[1]]) ref[m[1]] = r;
+    });
+  } catch (e) { Logger.log('No se pudo leer el N° de contrato del cliente: ' + e.message); }
   const items = [];
   Object.keys(porCv).forEach(cv => {
-    const hilos = GmailApp.search('subject:"' + cv + '" newer_than:180d', 0, 30).map(h => {
+    const q = ref[cv] ? '{subject:"' + cv + '" subject:"' + ref[cv] + '"}' : 'subject:"' + cv + '"';
+    const hilos = GmailApp.search(q + ' newer_than:180d', 0, 30).map(h => {
       let datos = null;
       return {
         asunto: h.getFirstMessageSubject() || '',
