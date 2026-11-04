@@ -12,6 +12,7 @@ export type LoteDetalle = {
   fecha_ingreso: string;
   stock_actual_tn: number;
   caida_pct_estimada: number | null;
+  descarte_real_tn?: number; // descarte ya cargado en el lote
 };
 
 export type FilaBase = {
@@ -296,14 +297,30 @@ function FilaLote({
 
   const valido = modo === "pct" ? pctValido : modo === "tn" ? tnValido : false;
 
-  const descarteEstimado =
-    modo === "pct" && pctValido
+  // Lote procesado: el descarte ya está restado del stock actual, así que se
+  // muestra el descarte real y lo que queda es lo exportable (no se vuelve a
+  // aplicar el % sobre el stock que ya quedó).
+  const procesado = lote.estado !== "natural";
+  const descarteReal = lote.descarte_real_tn ?? 0;
+  const pctReal =
+    procesado && descarteReal > 0 ? (descarteReal / (lote.stock_actual_tn + descarteReal)) * 100 : null;
+
+  const descarteEstimado = procesado
+    ? descarteReal > 0
+      ? descarteReal
+      : null
+    : modo === "pct" && pctValido
       ? (lote.stock_actual_tn * (pctNum as number)) / 100
       : modo === "tn" && tnValido
       ? (tnNum as number)
       : null;
-  const exportableEstimado =
-    descarteEstimado !== null ? lote.stock_actual_tn - descarteEstimado : null;
+  const exportableEstimado = procesado
+    ? descarteReal > 0
+      ? lote.stock_actual_tn
+      : null
+    : descarteEstimado !== null
+    ? lote.stock_actual_tn - descarteEstimado
+    : null;
 
   // Lo que se muestra en cada campo: el valor tipeado si es ese el modo
   // activo, o el equivalente calculado (gris) a partir del otro campo.
@@ -368,6 +385,8 @@ function FilaLote({
           />
         ) : esNatural ? (
           lote.caida_pct_estimada !== null ? `${lote.caida_pct_estimada}%` : "—"
+        ) : pctReal !== null ? (
+          `${pctReal.toFixed(2)}%`
         ) : (
           "—"
         )}
