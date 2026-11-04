@@ -833,7 +833,58 @@ function leerCarpetas() {
   const r = rpc('op_drive', { p_token: prop('TOKEN_SYNC'), p_items: items, p_carpetas: carpetas });
   Logger.log('Carpetas encontradas: %s de %s operaciones · documentos vistos: %s · pasos marcados: %s',
     carpetas.length, ops.length, items.length, r.hitos);
+  try { mailsPorOperacion(); } catch (e) { Logger.log('No se pudieron buscar los mails de cada operación: ' + e.message); }
   return r;
+}
+
+// ============================================================
+// ÚLTIMO MAIL CON EL CLIENTE Y CON EL FORWARDER (para los links de los pendientes)
+// ============================================================
+// Por cada operación busca los hilos con el CV en el asunto (el más reciente primero)
+// y guarda el link al último mensaje del hilo más reciente donde participa el cliente
+// (alguien que no es de Argreen ni proveedor) y del más reciente con el forwarder.
+// Si es un lote ("26-115 A"), prefiere los hilos que nombran esa letra.
+function mailsPorOperacion() {
+  const ops = rpc('op_activas_token', { p_token: prop('TOKEN_SYNC') });
+  const esProveedor = e => MAIL.PROVEEDORES.some(p => (e.split('@')[1] || '').indexOf(p) >= 0);
+  const esForwarder = e => MAIL.FORWARDERS.some(f => e.indexOf(f) >= 0);
+  const esCliente = e => e.indexOf('@') > 0 && !esProveedor(e) && !/despachante/i.test(e);
+  const porCv = {};
+  ops.forEach(o => (porCv[o.cv] = porCv[o.cv] || []).push(o));
+  const items = [];
+  Object.keys(porCv).forEach(cv => {
+    const hilos = GmailApp.search('subject:"' + cv + '" newer_than:180d', 0, 30).map(h => {
+      let datos = null;
+      return {
+        asunto: h.getFirstMessageSubject() || '',
+        datos: () => {
+          if (datos) return datos;
+          const msgs = h.getMessages();
+          const gente = [];
+          msgs.forEach(m => gente.push(...direcciones(m.getFrom() + ',' + m.getTo() + ',' + m.getCc())));
+          const ultimo = msgs[msgs.length - 1];
+          datos = {
+            gente,
+            url: 'https://mail.google.com/mail/#search/' +
+              encodeURIComponent('rfc822msgid:' + (ultimo.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+          };
+          return datos;
+        },
+      };
+    });
+    porCv[cv].forEach(o => {
+      const letra = o.lote ? new RegExp(cv.replace('-', '\\-') + '\\s*"?\\s*' + o.lote + '\\b', 'i') : null;
+      const orden = letra ? hilos.filter(h => letra.test(h.asunto)).concat(hilos.filter(h => !letra.test(h.asunto))) : hilos;
+      const buscar = cond => {
+        for (const h of orden) { const d = h.datos(); if (d.gente.some(cond)) return d.url; }
+        return null;
+      };
+      items.push({ clave: o.clave, cliente_url: buscar(esCliente), forwarder_url: buscar(esForwarder) });
+    });
+  });
+  const n = items.length ? rpc('op_mails_operacion', { p_token: prop('TOKEN_SYNC'), p_items: items }) : 0;
+  Logger.log('Links de mails: %s operaciones · con mail del cliente: %s · con mail del forwarder: %s',
+    n, items.filter(i => i.cliente_url).length, items.filter(i => i.forwarder_url).length);
 }
 
 function nombraBooking(nombre, booking) {
