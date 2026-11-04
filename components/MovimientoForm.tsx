@@ -67,6 +67,17 @@ function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): st
   return null;
 }
 
+// Emisores que figuran en la CP con otro nombre que el que usamos nosotros
+// (por ejemplo, la razón social de la planta). Se reemplazan antes de buscar.
+const ALIAS_EMISOR: { patron: RegExp; nombre: string }[] = [
+  { patron: /agro\s*bull/i, nombre: "BIURRUM" },
+];
+
+function conAlias(nombre: string | null | undefined): string | null {
+  if (!nombre) return null;
+  return ALIAS_EMISOR.find((a) => a.patron.test(nombre))?.nombre ?? nombre;
+}
+
 // Para comparar nombres de la CP con los del catálogo: sin acentos, sin
 // puntuación y sin la sociedad ("S.R.L.", "S.A.", "SAS"...).
 function normalizar(n: string): string {
@@ -98,10 +109,12 @@ export default function MovimientoForm({
   plantas,
   productos,
   productores,
+  stock = [],
 }: {
   plantas: Catalogo[];
   productos: Catalogo[];
   productores: Catalogo[];
+  stock?: { planta_id: string; producto_id: string; tn: number }[];
 }) {
   const [tipo, setTipo] = useState<Tipo>("ingreso");
   const [mensaje, setMensaje] = useState<
@@ -178,13 +191,6 @@ export default function MovimientoForm({
     // CP, en los tres tipos de movimiento (antes solo se hacía en
     // Directo). Sigue siendo un desplegable editable: si no matchea bien,
     // se elige a mano antes de guardar.
-    const productoDetectado = detectarProductoId(datos.granoTipo, productos);
-    if (productoDetectado) {
-      setProductoId(productoDetectado);
-    } else {
-      setProductoId("");
-      faltantes.push("producto (no se pudo asociar, elegilo a mano)");
-    }
 
     if (datos.numeroCpe) setNumeroCp(datos.numeroCpe);
     if (datos.transportista) setTransportista(datos.transportista);
@@ -233,25 +239,59 @@ export default function MovimientoForm({
     // egreso, la planta de donde sale. Si no está en el catálogo, se
     // ofrece agregarlo.
     setParaAgregar(null);
+    const emisor = conAlias(datos.titular);
+    let plantaElegida: string | null = null;
     if (tipoActual === "ingreso") {
-      const prod = buscarEnCatalogo(datos.titular, listaProductores);
+      const prod = buscarEnCatalogo(emisor, listaProductores);
       if (prod) setProductorId(prod.id);
       else {
         setProductorId("");
-        if (datos.titular) setParaAgregar({ tabla: "productores", nombre: datos.titular });
+        if (emisor) setParaAgregar({ tabla: "productores", nombre: emisor });
         else faltantes.push("titular (productor)");
       }
       // La planta del ingreso es el destino de la CP, si coincide con una del catálogo
-      const planta = buscarEnCatalogo(datos.destinoNombre, listaPlantas);
-      if (planta) setPlantaId(planta.id);
+      const planta = buscarEnCatalogo(conAlias(datos.destinoNombre), listaPlantas);
+      if (planta) {
+        setPlantaId(planta.id);
+        plantaElegida = planta.id;
+      }
     } else if (tipoActual === "egreso") {
-      const planta = buscarEnCatalogo(datos.titular, listaPlantas);
-      if (planta) setPlantaId(planta.id);
-      else {
+      const planta = buscarEnCatalogo(emisor, listaPlantas);
+      if (planta) {
+        setPlantaId(planta.id);
+        plantaElegida = planta.id;
+      } else {
         setPlantaId("");
-        if (datos.titular) setParaAgregar({ tabla: "plantas", nombre: datos.titular });
+        if (emisor) setParaAgregar({ tabla: "plantas", nombre: emisor });
         else faltantes.push("titular (planta)");
       }
+    }
+
+    // Producto: se asocia leyendo "Grano / especie" y "Tipo" de la CP.
+    // Colorado no dice si es Dark o Light: en un egreso se elige el que
+    // tiene stock en esa planta (si hay uno solo); si no, se elige a mano.
+    let productoDetectado = detectarProductoId(datos.granoTipo, productos);
+    const esColorado = /colorado/i.test(datos.granoTipo ?? "");
+    if (!productoDetectado && esColorado && plantaElegida) {
+      const conStock = productos.filter(
+        (p) =>
+          /colorado/i.test(p.nombre) &&
+          !/^descarte/i.test(p.nombre.trim()) &&
+          stock.some((x) => x.planta_id === plantaElegida && x.producto_id === p.id && x.tn > 0)
+      );
+      if (conStock.length === 1) productoDetectado = conStock[0].id;
+    }
+    if (productoDetectado) {
+      setProductoId(productoDetectado);
+    } else {
+      setProductoId("");
+      faltantes.push(
+        esColorado
+          ? "producto (la CP dice Colorado: elegí Dark o Light)"
+          : datos.granoTipo
+          ? `producto (la CP dice "${datos.granoTipo}", elegilo a mano)`
+          : "producto"
+      );
     }
 
     if (tipoActual === "egreso" || tipoActual === "directo") {
@@ -310,6 +350,20 @@ export default function MovimientoForm({
       setLeyendoCp(false);
     }
   }
+
+  // Si la CP dice Colorado y se elige la planta a mano en un egreso, se
+  // completa el producto con el colorado que tiene stock en esa planta.
+  useEffect(() => {
+    if (tipo !== "egreso" || productoId || !plantaId || !/colorado/i.test(datosCp?.granoTipo ?? "")) return;
+    const conStock = productos.filter(
+      (p) =>
+        /colorado/i.test(p.nombre) &&
+        !/^descarte/i.test(p.nombre.trim()) &&
+        stock.some((x) => x.planta_id === plantaId && x.producto_id === p.id && x.tn > 0)
+    );
+    if (conStock.length === 1) setProductoId(conStock[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plantaId]);
 
   async function agregarDesdeCp() {
     if (!paraAgregar) return;

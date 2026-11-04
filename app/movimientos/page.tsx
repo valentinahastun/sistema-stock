@@ -22,7 +22,7 @@ export default async function MovimientosPage() {
     );
   }
 
-  const [{ data: plantas }, { data: productos }, { data: productores }, { data: descartes }] =
+  const [{ data: plantas }, { data: productos }, { data: productores }, { data: descartes }, { data: stock }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -35,6 +35,7 @@ export default async function MovimientosPage() {
         .eq("tipo", "descarte")
         .order("fecha", { ascending: false })
         .limit(100),
+      supabase.from("stock_consolidado").select("planta_id, producto_id, stock_disponible_tn"),
     ]);
 
   type FilaDescarte = {
@@ -54,6 +55,11 @@ export default async function MovimientosPage() {
         plantas={plantas ?? []}
         productos={productos ?? []}
         productores={productores ?? []}
+        stock={(stock ?? []).map((x: any) => ({
+          planta_id: x.planta_id,
+          producto_id: x.producto_id,
+          tn: Number(x.stock_disponible_tn),
+        }))}
       />
 
       <h2 className="text-lg font-semibold mt-8 mb-3 text-brand-navy">
