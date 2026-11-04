@@ -40,7 +40,7 @@ const CONFIG = {
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
          etd: 'AO', eta: 'AP', cobro: 'AX' },
   FLE: { hoja: 'PAGOS FLETES', fila: 9, cv: 'B', estado: 'M' },
-  COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', estado: 'N' },
+  COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', anticipo: 'I', estado: 'N' },
   // PROYECCION CARGAS: las columnas se buscan por el título de la fila 4 (las dos
   // solapas no tienen exactamente las mismas columnas).
   PRO: { hojas: { 'Cargas Lu': 'lourdes', 'Cargas Vale': 'valentina' }, filaTitulos: 4,
@@ -119,10 +119,15 @@ function armarDatos(t) {
   // --- COBRANZAS: qué está cobrado
   const cobrado = {};
   const enCobranzas = {};
+  const anticipo = {};
   t.cobranzas.forEach(f => {
     const k = norm(f[col(C.cv)]);
     if (!k) return;
     enCobranzas[k] = true;
+    // Columna I: anticipo cobrado (monto en USD)
+    const a = f[col(C.anticipo)];
+    const monto = typeof a === 'number' ? a : Number(String(a || '').replace(/[^\d.-]/g, ''));
+    if (monto > 0) anticipo[k] = monto;
     if (/^cobrad/i.test(String(f[col(C.estado)]).trim())) cobrado[k] = true;
   });
 
@@ -228,6 +233,8 @@ function armarDatos(t) {
     if (s && esFecha(s[col(S.consolidado)])) hito(k, 'consolidado', s[col(S.consolidado)], 'seguimiento');
     if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'ddee', s[col(S.fechaOfi)], 'seguimiento', 'Permiso oficializado');
     if (s && esFecha(s[col(S.cobro)])) hito(k, 'cobranza', s[col(S.cobro)], 'seguimiento');
+    const ant = anticipo[k] || anticipo[k.slice(0, 6)];
+    if (ant) hito(k, 'anticipo', null, 'cobranzas', 'Anticipo en COBRANZAS: ' + ant.toLocaleString('en-US') + ' USD');
   });
 
   // --- PAGOS FLETES: flete pagado
