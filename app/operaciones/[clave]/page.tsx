@@ -165,14 +165,6 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                   {a && (
                     <div className={"text-xs " + (a.nivel === "vencida" ? "text-red-700" : "text-amber-700")}>
                       {a.mensaje}
-                      {a.mail_url && (
-                        <>
-                          {" · "}
-                          <a href={a.mail_url} target="_blank" rel="noreferrer" className="underline">
-                            abrir el mail
-                          </a>
-                        </>
-                      )}
                     </div>
                   )}
                   {e === "sin_registro" && !listaDe(o, p.codigo, hechos) && (

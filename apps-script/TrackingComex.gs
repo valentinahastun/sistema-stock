@@ -35,7 +35,7 @@ const CONFIG = {
   HORA_MAIL: 8,
 
   VEN: { hoja: 'VENTAS', fila: 2, fecha: 'A', cv: 'B', firmado: 'C', producto: 'D', tn: 'G',
-         buyer: 'K', importador: 'O', payment: 'V', destino: 'X', refCliente: 'Y' },
+         buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
   SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', consolidado: 'H',
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
          etd: 'AO', eta: 'AP', cobro: 'AX' },
@@ -314,8 +314,6 @@ function armarMailDiario(alertas, agenda, app, ahora) {
       (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(a) + '</a>' : '<b>' + op(a) + '</b>') +
       ' <span style="color:#475569">· ' + esc(corto(a)) + '</span>' +
       '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + esc(a.cliente || '') + (a.destino ? ' · ' + esc(a.destino) : '') + '</div></td>' +
-      (a.mail_url ? '<td align="right" valign="top" style="white-space:nowrap;padding-left:8px"><a href="' + a.mail_url + '" style="' + FONT +
-        'font-size:12px;color:#0369a1;text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:3px 8px">✉️ Mail</a></td>' : '') +
       '</tr></table></td></tr>';
   };
 
@@ -833,70 +831,7 @@ function leerCarpetas() {
   const r = rpc('op_drive', { p_token: prop('TOKEN_SYNC'), p_items: items, p_carpetas: carpetas });
   Logger.log('Carpetas encontradas: %s de %s operaciones · documentos vistos: %s · pasos marcados: %s',
     carpetas.length, ops.length, items.length, r.hitos);
-  try { mailsPorOperacion(); } catch (e) { Logger.log('No se pudieron buscar los mails de cada operación: ' + e.message); }
   return r;
-}
-
-// ============================================================
-// ÚLTIMO MAIL CON EL CLIENTE Y CON EL FORWARDER (para los links de los pendientes)
-// ============================================================
-// Por cada operación busca los hilos con el CV en el asunto (el más reciente primero)
-// y guarda el link al último mensaje del hilo más reciente donde participa el cliente
-// (alguien que no es de Argreen ni proveedor) y del más reciente con el forwarder.
-// Si es un lote ("26-115 A"), prefiere los hilos que nombran esa letra.
-function mailsPorOperacion() {
-  const ops = rpc('op_activas_token', { p_token: prop('TOKEN_SYNC') });
-  const esProveedor = e => MAIL.PROVEEDORES.some(p => (e.split('@')[1] || '').indexOf(p) >= 0);
-  const esForwarder = e => MAIL.FORWARDERS.some(f => e.indexOf(f) >= 0);
-  const esCliente = e => e.indexOf('@') > 0 && !esProveedor(e) && !/despachante/i.test(e);
-  const porCv = {};
-  ops.forEach(o => (porCv[o.cv] = porCv[o.cv] || []).push(o));
-  // N° de contrato del cliente (VENTAS, columna Y: "MC26631"): muchos clientes y brokers
-  // escriben con ese número en el asunto en vez del CV.
-  const ref = {};
-  try {
-    const V = CONFIG.VEN;
-    const sh = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName(V.hoja);
-    sh.getRange(V.fila, 1, sh.getLastRow() - V.fila + 1, sh.getLastColumn()).getValues().forEach(f => {
-      const m = String(f[col(V.cv)]).match(/(\d{2}-\d{3})/);
-      const r = txt(f[col(V.refCliente)]).trim();
-      if (m && r.length >= 5 && /\d{4}/.test(r) && !ref[m[1]]) ref[m[1]] = r;
-    });
-  } catch (e) { Logger.log('No se pudo leer el N° de contrato del cliente: ' + e.message); }
-  const items = [];
-  Object.keys(porCv).forEach(cv => {
-    const q = ref[cv] ? '{subject:"' + cv + '" subject:"' + ref[cv] + '"}' : 'subject:"' + cv + '"';
-    const hilos = GmailApp.search(q + ' newer_than:180d', 0, 30).map(h => {
-      let datos = null;
-      return {
-        asunto: h.getFirstMessageSubject() || '',
-        datos: () => {
-          if (datos) return datos;
-          const msgs = h.getMessages();
-          const gente = [];
-          msgs.forEach(m => gente.push(...direcciones(m.getFrom() + ',' + m.getTo() + ',' + m.getCc())));
-          const ultimo = msgs[msgs.length - 1];
-          datos = {
-            gente,
-            url: 'https://mail.google.com/mail/#all/' + ultimo.getId(),
-          };
-          return datos;
-        },
-      };
-    });
-    porCv[cv].forEach(o => {
-      const letra = o.lote ? new RegExp(cv.replace('-', '\\-') + '\\s*"?\\s*' + o.lote + '\\b', 'i') : null;
-      const orden = letra ? hilos.filter(h => letra.test(h.asunto)).concat(hilos.filter(h => !letra.test(h.asunto))) : hilos;
-      const buscar = cond => {
-        for (const h of orden) { const d = h.datos(); if (d.gente.some(cond)) return d.url; }
-        return null;
-      };
-      items.push({ clave: o.clave, cliente_url: buscar(esCliente), forwarder_url: buscar(esForwarder) });
-    });
-  });
-  const n = items.length ? rpc('op_mails_operacion', { p_token: prop('TOKEN_SYNC'), p_items: items }) : 0;
-  Logger.log('Links de mails: %s operaciones · con mail del cliente: %s · con mail del forwarder: %s',
-    n, items.filter(i => i.cliente_url).length, items.filter(i => i.forwarder_url).length);
 }
 
 function nombraBooking(nombre, booking) {
