@@ -577,7 +577,8 @@ function analizarMensajes(msgs) {
 
     // 7: el cliente o broker aprueba los drafts ("Drafts have been approved",
     //    "Proceder con originales"). El CV sale del asunto del hilo.
-    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) && !NO_APRUEBA.test(sinAcentos(m.texto))) {
+    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) &&
+        (!NO_APRUEBA.test(sinAcentos(m.texto)) || PROCEDER_ORIGINALES.test(sinAcentos(m.texto)))) {
       const cv = cvDeAsunto(asunto);
       add(m, 'draft_aprobado', cv, !!cv, cv ? 'El cliente aprobó los drafts (' + m.de + ')' : 'Aprobación de drafts sin CV en el asunto');
       return;
@@ -618,6 +619,11 @@ function analizarMensajes(msgs) {
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
 const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
+
+// "Proceder con originales" es aprobación aunque pida algún retoque en el mismo mail
+// ("Solo habría que hacer esas modificaciones y proceder con originales"), salvo que diga
+// que se espera a la corrección ("una vez corregido", "cuando esté", "antes de").
+const PROCEDER_ORIGINALES = /^(?![\s\S]*\b(una vez|cuando|antes de|no)\s+[^.\n]{0,30}(proced|avanz))[\s\S]*\b(proceder|procedan|procede|avanzar|avancen|seguir)\s+con\s+(los\s+)?originales/i;
 
 // Aprobación a medias: "drafts ok! Aguardo el resto de drafts", "falta el fito", "con estas correcciones"
 const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|aguardo\s+(los\s+)?(otros|demas)|falta|faltan|pendiente|correcci|corregir|comentarios|modificar|modificacion)/i;
@@ -892,4 +898,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
