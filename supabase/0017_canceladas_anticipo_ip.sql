@@ -3,7 +3,8 @@
 --   2. "Lleva anticipo" y "Lleva IP" se pueden marcar a mano por operación. Marcado a mano, alerta
 --      aunque la operación ya haya cargado.
 --   3. "Contenedores retirados sin Apto" solo alerta si todavía no consolidó.
---   4. 26-127: se borra la aprobación de drafts mal tomada del mail ("drafts ok! Aguardo el resto de drafts").
+--   4. Se cancelan la 26-126 A y B.
+--   5. 26-127: se borra la aprobación de drafts mal tomada del mail ("drafts ok! Aguardo el resto de drafts").
 -- Ejecutar en Supabase > SQL Editor. Se puede ejecutar más de una vez.
 
 alter table public.op_operaciones add column if not exists cancelada boolean not null default false;
@@ -26,6 +27,9 @@ create trigger op_no_reactivar_canceladas before insert or update on public.op_o
 
 delete from public.op_hitos
 where clave = '26-127' and paso = 'draft_aprobado' and fuente = 'mail';
+
+-- Canceladas: 26-126 A y B
+update public.op_operaciones set cancelada = true where cv = '26-126' and lote in ('A', 'B');
 
 create or replace function public.op_calcular_alertas()
 returns table (
