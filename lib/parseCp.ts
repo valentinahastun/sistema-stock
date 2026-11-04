@@ -45,10 +45,13 @@ export type CpParseada = {
   pesoNetoCargaKg: number | null; // sección B (origen): "kg cargados"
   pesoNetoDescargaKg: number | null; // sección G (destino): "kg descargados"
   fecha: string | null; // yyyy-mm-dd — fecha de emisión, arriba a la derecha del documento
+  fechaPartida: string | null; // yyyy-mm-dd — sección E (salida del camión): la que usa el egreso
+  fechaDescarga: string | null; // yyyy-mm-dd — sección G (descarga): la que usa el ingreso
   titular: string | null; // Titular de la Carta de Porte (sección A)
   productor: string | null; // Remitente Comercial Productor (sección A)
   destino: string | null; // Destino (sección A) + localidad/provincia (sección D), a modo de registro
-  granoTipo: string | null; // "Grano / Poroto Tipo" tal cual figura en la CP (sección B)
+  destinoNombre: string | null; // solo el nombre del Destino (sección A), sin CUIT ni localidad
+  granoTipo: string | null; // "Grano / especie" + "Tipo" tal cual figuran en la CP (sección B)
 };
 
 // Devuelve lo que sigue a una etiqueta en una línea, cortando si aparece
@@ -131,8 +134,18 @@ export function parseCp(lineas: string[]): CpParseada {
   // fecha que siempre está presente (a diferencia de "Partida" o "Fecha
   // Descarga", que pueden faltar), así que es la que se usa siempre,
   // sea ingreso, egreso o movimiento directo.
-  const lineaEncabezado = primeraLineaConEtiqueta(lineas, /Carta de Porte Electr[oó]nica/i);
-  const fecha = aFechaISO(lineaEncabezado ? valorTrasEtiqueta(lineaEncabezado, /Fecha\s*:/i) : null);
+  // Según cómo sale el PDF, "Fecha:" queda en el mismo renglón que el título
+  // o en uno propio arriba de todo: se toma el primero que tenga una fecha.
+  const lineaFecha = lineas.find((l) => /(^|\s)Fecha\s*:\s*\d{1,2}\/\d{1,2}\/\d{4}/i.test(l));
+  const fecha = aFechaISO(lineaFecha ? valorTrasEtiqueta(lineaFecha, /(^|\s)Fecha\s*:/i) : null);
+
+  // Fecha de partida (sección E) y de descarga (sección G)
+  const lineaPartida = primeraLineaConEtiqueta(lineas, /Partida\s*:\s*\d/i);
+  const fechaPartida = aFechaISO(lineaPartida ? valorTrasEtiqueta(lineaPartida, /Partida\s*:/i) : null);
+  const lineaFechaDescarga = seccionG.find((l) => /Fecha Descarga\s*:\s*\d/i.test(l));
+  const fechaDescarga = aFechaISO(
+    lineaFechaDescarga ? valorTrasEtiqueta(lineaFechaDescarga, /Fecha Descarga\s*:/i) : null
+  );
 
   const lineaChofer = primeraLineaConEtiqueta(lineas, /Chofer\s*:/i);
   const chofer = sinCuit(lineaChofer ? valorTrasEtiqueta(lineaChofer, /Chofer\s*:/i) : null);
@@ -174,22 +187,29 @@ export function parseCp(lineas: string[]): CpParseada {
       : destinoEntidad
     : null;
 
-  const lineaGrano = seccionB.find((l) => /Grano\s*\/\s*Poroto Tipo\s*:/i.test(l));
-  const granoTipo = lineaGrano
-    ? valorTrasEtiqueta(lineaGrano, /Grano\s*\/\s*Poroto Tipo\s*:/i, [/Campa[ñn]a\s*:?/i])
+  // "Grano / especie: Poroto Tipo: POROTO COLORADO (Phaseolus vulgaris) Campaña: 2526"
+  // "Grano / especie: Poroto Mung (Vigna radiata) Tipo: POROTO MUNG (Vigna radiata) Campaña: 2526"
+  const lineaGrano = seccionB.find((l) => /Grano\s*\/\s*(especie|Poroto[^:]*)\s*:/i.test(l));
+  const especie = lineaGrano
+    ? valorTrasEtiqueta(lineaGrano, /Grano\s*\/\s*especie\s*:/i, [/\bTipo\s*:/i, /Campa[ñn]a\s*:?/i])
     : null;
+  const tipoGrano = lineaGrano
+    ? valorTrasEtiqueta(lineaGrano, /\bTipo\s*:/i, [/Campa[ñn]a\s*:?/i])
+    : null;
+  const granoTipo = [especie, tipoGrano].filter(Boolean).join(" · ") || null;
 
-  const lineaPesoCarga = seccionB.find((l) => /Peso Neto\b(?!\s*\(kg\))/i.test(l));
-  const pesoNetoCargaKg = aNumero(
-    lineaPesoCarga ? valorTrasEtiqueta(lineaPesoCarga, /Peso Neto\b(?!\s*\(kg\))/i) : null
-  );
-
-  const lineaPesoDescarga = seccionG.find((l) => /Peso Neto\s*\(kg\)\s*:/i.test(l));
-  const pesoNetoDescargaKg = aNumero(
-    lineaPesoDescarga
-      ? valorTrasEtiqueta(lineaPesoDescarga, /Peso Neto\s*\(kg\)\s*:/i, [/Provincia\s*:?/i])
-      : null
-  );
+  // Peso neto: el número que viene pegado a la etiqueta "Peso Neto (kg):".
+  // Sección B = lo que se cargó; sección G = lo que se descargó (vacío si
+  // todavía no llegó a destino).
+  const pesoNeto = (seccion: string[]) => {
+    for (const l of seccion) {
+      const m = l.match(/Peso Neto\s*(?:\(kg\))?\s*:?\s*([\d.,]+)/i);
+      if (m) return aNumero(m[1]);
+    }
+    return null;
+  };
+  const pesoNetoCargaKg = pesoNeto(seccionB);
+  const pesoNetoDescargaKg = pesoNeto(seccionG);
 
   return {
     numeroCpe: numeroCpeMatch ? numeroCpeMatch[1] : null,
@@ -200,9 +220,12 @@ export function parseCp(lineas: string[]): CpParseada {
     pesoNetoCargaKg,
     pesoNetoDescargaKg,
     fecha,
+    fechaPartida,
+    fechaDescarga,
     titular,
     productor,
     destino,
+    destinoNombre: destinoEntidad,
     granoTipo,
   };
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { crearIngreso, crearMovimientoDirecto, crearEgreso } from "@/app/movimientos/actions";
+import { crearDesdeCp } from "@/app/catalogos/actions";
 
 type Catalogo = { id: string; nombre: string };
 
@@ -14,9 +15,12 @@ type DatosCp = {
   pesoNetoCargaKg: number | null;
   pesoNetoDescargaKg: number | null;
   fecha: string | null;
+  fechaPartida?: string | null;
+  fechaDescarga?: string | null;
   titular: string | null;
   productor: string | null;
   destino: string | null;
+  destinoNombre?: string | null;
   granoTipo: string | null;
 };
 
@@ -47,15 +51,47 @@ function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): st
   // Colorado Dark vs Light no se distingue en el texto de la CP: mejor no
   // adivinar y que se elija a mano, en vez de arriesgar el catch-all de Adzuki.
   if (/colorado/i.test(granoTipo)) return null;
+  const sinDescarte = productos.filter((p) => !/^descarte/i.test(p.nombre.trim()));
   for (const regla of REGLAS_PRODUCTO_DIRECTO) {
     if (regla.patron.test(granoTipo)) {
-      const match = productos.find(
+      const exacto = sinDescarte.find(
         (p) => p.nombre.trim().toLowerCase() === regla.nombreProducto.toLowerCase()
       );
-      if (match) return match.id;
+      if (exacto) return exacto.id;
+      // Si el catálogo lo nombra distinto ("Poroto Mung" / "Mung"), alcanza con la palabra clave
+      const clave = regla.nombreProducto.replace(/^Poroto\s+/i, "").slice(0, 4).toLowerCase();
+      const parecido = sinDescarte.find((p) => p.nombre.toLowerCase().includes(clave));
+      if (parecido) return parecido.id;
     }
   }
   return null;
+}
+
+// Para comparar nombres de la CP con los del catálogo: sin acentos, sin
+// puntuación y sin la sociedad ("S.R.L.", "S.A.", "SAS"...).
+function normalizar(n: string): string {
+  return n
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\b(S\s*R\s*L|S\s*A\s*S|S\s*A|S\s*C|S\s*H|SOCIEDAD ANONIMA|SRL|SAS|SA)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buscarEnCatalogo(nombre: string | null | undefined, catalogo: Catalogo[]): Catalogo | null {
+  if (!nombre) return null;
+  const n = normalizar(nombre);
+  if (!n) return null;
+  const exacto = catalogo.find((c) => normalizar(c.nombre) === n);
+  if (exacto) return exacto;
+  return (
+    catalogo.find((c) => {
+      const cn = normalizar(c.nombre);
+      return cn.length >= 4 && (n.includes(cn) || cn.includes(n));
+    }) ?? null
+  );
 }
 
 export default function MovimientoForm({
@@ -89,6 +125,15 @@ export default function MovimientoForm({
   const [titular, setTitular] = useState("");
   const [productor, setProductor] = useState("");
   const [productoId, setProductoId] = useState("");
+  const [plantaId, setPlantaId] = useState("");
+  const [productorId, setProductorId] = useState("");
+  // Catálogos locales: si desde la CP se agrega una planta o un productor
+  // nuevo, aparece en la lista sin recargar la página.
+  const [listaPlantas, setListaPlantas] = useState<Catalogo[]>(plantas);
+  const [listaProductores, setListaProductores] = useState<Catalogo[]>(productores);
+  // Emisor de la CP que no está en el catálogo: se ofrece agregarlo.
+  const [paraAgregar, setParaAgregar] = useState<{ tabla: "plantas" | "productores"; nombre: string } | null>(null);
+  const [agregando, setAgregando] = useState(false);
   // Últimos datos leídos de una CP, para poder recalcular los campos que
   // dependen del tipo (cantidad, fecha, destino, producto...) cuando la
   // persona cambia de pestaña después de leerla, sin tener que volver a
@@ -112,6 +157,9 @@ export default function MovimientoForm({
     setTitular("");
     setProductor("");
     setProductoId("");
+    setPlantaId("");
+    setProductorId("");
+    setParaAgregar(null);
     setDatosCp(null);
     setMensajeCp(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
@@ -166,13 +214,45 @@ export default function MovimientoForm({
         setCantidad((pesoKg / 1000).toFixed(3));
       } else {
         setCantidad("");
-        faltantes.push(tipoActual === "ingreso" ? "peso neto de descarga" : "peso neto de carga");
+        faltantes.push(
+          tipoActual === "ingreso"
+            ? "peso neto de descarga (la CP todavía no tiene la descarga cargada)"
+            : "peso neto de carga"
+        );
       }
     }
 
-    // La fecha siempre es la de emisión de la CP (arriba a la derecha
-    // del documento), sea cual sea el tipo de movimiento.
-    if (datos.fecha) setFecha(datos.fecha);
+    // Fecha: el ingreso toma la de descarga y el egreso la de partida; si
+    // la CP no la tiene, la de emisión (arriba a la derecha).
+    const fechaTipo =
+      tipoActual === "ingreso" ? datos.fechaDescarga : tipoActual === "egreso" ? datos.fechaPartida : null;
+    if (fechaTipo) setFecha(fechaTipo);
+    else if (datos.fecha) setFecha(datos.fecha);
+
+    // Emisor de la CP (Titular): en un ingreso es el productor; en un
+    // egreso, la planta de donde sale. Si no está en el catálogo, se
+    // ofrece agregarlo.
+    setParaAgregar(null);
+    if (tipoActual === "ingreso") {
+      const prod = buscarEnCatalogo(datos.titular, listaProductores);
+      if (prod) setProductorId(prod.id);
+      else {
+        setProductorId("");
+        if (datos.titular) setParaAgregar({ tabla: "productores", nombre: datos.titular });
+        else faltantes.push("titular (productor)");
+      }
+      // La planta del ingreso es el destino de la CP, si coincide con una del catálogo
+      const planta = buscarEnCatalogo(datos.destinoNombre, listaPlantas);
+      if (planta) setPlantaId(planta.id);
+    } else if (tipoActual === "egreso") {
+      const planta = buscarEnCatalogo(datos.titular, listaPlantas);
+      if (planta) setPlantaId(planta.id);
+      else {
+        setPlantaId("");
+        if (datos.titular) setParaAgregar({ tabla: "plantas", nombre: datos.titular });
+        else faltantes.push("titular (planta)");
+      }
+    }
 
     if (tipoActual === "egreso" || tipoActual === "directo") {
       if (datos.destino) setDestino(datos.destino);
@@ -229,6 +309,45 @@ export default function MovimientoForm({
     } finally {
       setLeyendoCp(false);
     }
+  }
+
+  async function agregarDesdeCp() {
+    if (!paraAgregar) return;
+    setAgregando(true);
+    const r = await crearDesdeCp(paraAgregar.tabla, paraAgregar.nombre);
+    setAgregando(false);
+    if (!r.ok) {
+      setMensajeCp({ tipo: "error", texto: r.error });
+      return;
+    }
+    const nuevo = { id: r.id, nombre: r.nombre };
+    if (paraAgregar.tabla === "productores") {
+      setListaProductores((l) => (l.some((x) => x.id === nuevo.id) ? l : [...l, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre))));
+      setProductorId(nuevo.id);
+    } else {
+      setListaPlantas((l) => (l.some((x) => x.id === nuevo.id) ? l : [...l, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre))));
+      setPlantaId(nuevo.id);
+    }
+    setParaAgregar(null);
+  }
+
+  function AvisoAgregar({ tabla }: { tabla: "plantas" | "productores" }) {
+    if (!paraAgregar || paraAgregar.tabla !== tabla) return null;
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 rounded px-2 py-1.5">
+        <span>
+          «{paraAgregar.nombre}» (emisor de la CP) no está en {tabla === "plantas" ? "las plantas" : "los productores"}.
+        </span>
+        <button
+          type="button"
+          disabled={agregando}
+          onClick={agregarDesdeCp}
+          className="rounded bg-brand-navy text-white px-2 py-0.5 disabled:opacity-50"
+        >
+          {agregando ? "Agregando…" : tabla === "plantas" ? "Agregar como planta" : "Agregar como productor"}
+        </button>
+      </div>
+    );
   }
 
   async function handleSubmit(formData: FormData) {
@@ -317,9 +436,9 @@ export default function MovimientoForm({
             <CampoCp />
 
             <Campo label="Planta">
-              <select name="planta_id" required className="input">
+              <select name="planta_id" required className="input" value={plantaId} onChange={(e) => setPlantaId(e.target.value)}>
                 <option value="">Seleccionar…</option>
-                {plantas.map((p) => (
+                {listaPlantas.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>
@@ -345,14 +464,15 @@ export default function MovimientoForm({
             </Campo>
 
             <Campo label="Productor">
-              <select name="productor_id" required className="input">
+              <select name="productor_id" required className="input" value={productorId} onChange={(e) => setProductorId(e.target.value)}>
                 <option value="">Seleccionar…</option>
-                {productores.map((p) => (
+                {listaProductores.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>
                 ))}
               </select>
+              <AvisoAgregar tabla="productores" />
             </Campo>
 
             <Campo label="Estado">
@@ -427,14 +547,15 @@ export default function MovimientoForm({
             <CampoCp />
 
             <Campo label="Planta (de dónde sale)">
-              <select name="planta_id" required className="input">
+              <select name="planta_id" required className="input" value={plantaId} onChange={(e) => setPlantaId(e.target.value)}>
                 <option value="">Seleccionar…</option>
-                {plantas.map((p) => (
+                {listaPlantas.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>
                 ))}
               </select>
+              <AvisoAgregar tabla="plantas" />
             </Campo>
 
             <Campo label="Producto">
@@ -457,7 +578,7 @@ export default function MovimientoForm({
             <Campo label="Productor (opcional, solo a modo de registro)">
               <select name="productor_id" className="input">
                 <option value="">No especificar</option>
-                {productores.map((p) => (
+                {listaProductores.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>

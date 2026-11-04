@@ -63,3 +63,30 @@ export async function crearProducto(formData: FormData): Promise<Resultado> {
 export async function crearProductor(formData: FormData): Promise<Resultado> {
   return crear("productores", (formData.get("nombre") as string) ?? "");
 }
+
+// Alta rápida desde la lectura de una Carta de Porte: si ya existe (mismo
+// nombre, sin importar mayúsculas) devuelve ese; si no, lo crea. Devuelve el id
+// para dejarlo elegido en el formulario.
+export async function crearDesdeCp(
+  tabla: "plantas" | "productores",
+  nombreCrudo: string
+): Promise<{ ok: true; id: string; nombre: string } | { ok: false; error: string }> {
+  try {
+    await verificarAdmin();
+    const nombre = nombreCrudo.trim();
+    if (!nombre) return { ok: false, error: "El nombre no puede estar vacío." };
+    const supabase = createClient();
+    const { data: existentes } = await supabase.from(tabla).select("id, nombre");
+    const ya = (existentes ?? []).find(
+      (e: { nombre: string }) => e.nombre.trim().toLowerCase() === nombre.toLowerCase()
+    ) as { id: string; nombre: string } | undefined;
+    if (ya) return { ok: true, id: ya.id, nombre: ya.nombre };
+    const { data, error } = await supabase.from(tabla).insert({ nombre }).select("id, nombre").single();
+    if (error || !data) return { ok: false, error: error?.message ?? "No se pudo crear." };
+    revalidatePath("/catalogos");
+    revalidatePath("/movimientos");
+    return { ok: true, id: data.id, nombre: data.nombre };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
