@@ -237,31 +237,134 @@ function armarDatos(t) {
 // MAIL DIARIO
 // ============================================================
 function mailDiario() {
-  const alertas = rpc('op_alertas_token', { p_token: prop('TOKEN_SYNC') }).filter(a => a.en_mail);
-  const app = prop('APP_URL') || '';
-  const fecha = Utilities.formatDate(new Date(), 'America/Argentina/Buenos_Aires', 'dd/MM/yyyy');
-  const vencidas = alertas.filter(a => a.nivel === 'vencida');
-  const proximas = alertas.filter(a => a.nivel === 'proxima');
-  if (!alertas.length) {
-    MailApp.sendEmail({ to: CONFIG.MAIL_DESTINATARIOS.join(','), subject: 'Operaciones Comex · ' + fecha + ' · sin alertas',
-      htmlBody: '<p>Hoy no hay alertas en las operaciones abiertas.</p>' + (app ? '<p><a href="' + app + '">Abrir Operaciones Comex</a></p>' : '') });
-    return;
-  }
-  const nombre = r => r === 'lourdes' ? 'Lourdes' : r === 'valentina' ? 'Valentina' : 'Sin responsable';
-  const tabla = (lista, titulo, color) => !lista.length ? '' :
-    '<h3 style="font-family:Arial;color:' + color + ';margin:18px 0 6px">' + titulo + ' (' + lista.length + ')</h3>' +
-    '<table cellpadding="6" style="border-collapse:collapse;font-family:Arial;font-size:13px">' +
-    '<tr style="background:#eaf7f1"><th align="left">Operación</th><th align="left">Cliente</th><th align="left">Alerta</th><th align="left">Responsable</th></tr>' +
-    lista.map(a => '<tr style="border-top:1px solid #ddd"><td>' +
-      (app ? '<a href="' + app + '/operaciones/' + encodeURIComponent(a.clave) + '">' : '') +
-      'CV ' + a.cv + (a.lote ? ' ' + a.lote : '') + (app ? '</a>' : '') + '</td><td>' + esc(a.cliente || '') +
-      '</td><td>' + esc(a.mensaje) + '</td><td>' + nombre(a.responsable) + '</td></tr>').join('') + '</table>';
-  MailApp.sendEmail({
-    to: CONFIG.MAIL_DESTINATARIOS.join(','),
-    subject: 'Operaciones Comex · ' + fecha + ' · ' + vencidas.length + ' para hoy, ' + proximas.length + ' próximas',
-    htmlBody: tabla(vencidas, 'Para resolver hoy', '#b42318') + tabla(proximas, 'Vencen en los próximos días', '#9a6700') +
-      (app ? '<p style="font-family:Arial;font-size:13px;margin-top:18px"><a href="' + app + '">Abrir Operaciones Comex</a></p>' : ''),
-  });
+  const token = prop('TOKEN_SYNC');
+  const alertas = rpc('op_alertas_token', { p_token: token }).filter(a => a.en_mail);
+  let agenda = [];
+  try { agenda = rpc('op_agenda_token', { p_token: token, p_dias: 1 }); } catch (e) { Logger.log('Sin agenda: ' + e); }
+  const m = armarMailDiario(alertas, agenda, prop('APP_URL') || '', new Date());
+  MailApp.sendEmail({ to: CONFIG.MAIL_DESTINATARIOS.join(','), subject: m.asunto, htmlBody: m.html });
+}
+
+// Qué hay que hacer con cada alerta, en el orden en que conviene resolverlas.
+const TAREAS = [
+  { paso: 'draft_enviado', titulo: 'Mandar drafts al cliente', icono: '📤' },
+  { paso: 'draft_aprobado', titulo: 'Consultar aprobación de drafts', icono: '📄' },
+  { paso: 'originales', titulo: 'Reclamar originales', icono: '📦' },
+  { paso: 'gmo', titulo: 'Reclamar GMO original', icono: '🧬' },
+  { paso: 'etiqueta', titulo: 'Aprobar etiquetas', icono: '🏷️' },
+  { paso: 'anticipo', titulo: 'Consultar anticipos', icono: '💵' },
+  { paso: 'ip', titulo: 'Pedir IP', icono: '📑' },
+  { paso: 'retiro', titulo: 'Revisar calidad (sin Apto)', icono: '🧪' },
+  { paso: 'flete', titulo: 'Pedir pago de flete', icono: '🚢' },
+  { paso: 'cobranza', titulo: 'Seguir cobranzas', icono: '💰' },
+];
+const AGENDA = {
+  carga: { texto: 'Carga en planta', icono: '🚛' },
+  consolidado: { texto: 'Consolidado', icono: '📦' },
+  corte: { texto: 'Corte documental', icono: '⏰' },
+};
+
+function armarMailDiario(alertas, agenda, app, ahora) {
+  const tz = 'America/Argentina/Buenos_Aires';
+  const f = (d, p) => Utilities.formatDate(d, tz, p);
+  const hoyIso = f(ahora, 'yyyy-MM-dd');
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const dHoy = new Date(hoyIso + 'T12:00:00Z');
+  const fechaLarga = dias[dHoy.getUTCDay()] + ' ' + dHoy.getUTCDate() + ' de ' + meses[dHoy.getUTCMonth()];
+  const fechaCorta = f(ahora, 'dd/MM');
+
+  const FONT = 'font-family:Arial,Helvetica,sans-serif;';
+  const link = clave => app ? app + '/operaciones/' + encodeURIComponent(clave) : '';
+  const op = a => 'CV ' + esc(a.cv) + (a.lote ? ' ' + esc(a.lote) : '');
+  const corto = a => {
+    if (a.paso === 'retiro') return 'contenedores retirados sin Apto';
+    const i = a.mensaje.indexOf(': ');
+    return i > 0 && i < 40 ? a.mensaje.slice(i + 2) : a.mensaje;
+  };
+  const chip = r => !r ? '' : '<span style="' + FONT + 'font-size:11px;font-weight:bold;border-radius:10px;padding:2px 8px;' +
+    (r === 'lourdes' ? 'background:#f1ecff;color:#6d4bd1' : 'background:#e6f6f4;color:#0f766e') + '">' +
+    (r === 'lourdes' ? 'Lourdes' : r === 'valentina' ? 'Valentina' : esc(r)) + '</span>';
+
+  const urgentes = alertas.filter(a => a.nivel === 'vencida');
+  const proximas = alertas.length - urgentes.length;
+
+  // Tareas agrupadas; primero las que tienen algo vencido
+  const grupos = TAREAS.map((t, orden) => {
+    const items = alertas.filter(a => a.paso === t.paso)
+      .sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === 'vencida' ? -1 : 1));
+    return Object.assign({}, t, { orden, items, urgentes: items.filter(a => a.nivel === 'vencida').length });
+  }).filter(g => g.items.length)
+    .sort((a, b) => (b.urgentes > 0) - (a.urgentes > 0) || a.orden - b.orden);
+
+  const numero = (n, texto, color) =>
+    '<td width="33%" style="padding:4px"><div style="background:#ffffff;border-radius:12px;padding:12px 14px;border:1px solid #eef0f3">' +
+    '<div style="' + FONT + 'font-size:26px;font-weight:bold;color:' + color + '">' + n + '</div>' +
+    '<div style="' + FONT + 'font-size:12px;color:#64748b">' + texto + '</div></div></td>';
+
+  const fila = (a) => {
+    const rojo = a.nivel === 'vencida';
+    const url = link(a.clave);
+    return '<tr><td style="padding:10px 16px;border-top:1px solid #f1f5f9">' +
+      '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+      '<td width="14" valign="top" style="padding-top:5px"><div style="width:8px;height:8px;border-radius:4px;background:' + (rojo ? '#f43f5e' : '#f59e0b') + '"></div></td>' +
+      '<td style="' + FONT + 'font-size:14px;color:#334155">' +
+      (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(a) + '</a>' : '<b>' + op(a) + '</b>') +
+      ' <span style="color:#475569">· ' + esc(corto(a)) + '</span>' +
+      '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + esc(a.cliente || '') + (a.destino ? ' · ' + esc(a.destino) : '') + '</div></td>' +
+      '<td align="right" valign="top" style="white-space:nowrap">' + chip(a.responsable) + '</td>' +
+      '</tr></table></td></tr>';
+  };
+
+  const tarjeta = g =>
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3;margin-bottom:14px">' +
+    '<tr><td style="padding:12px 16px;' + FONT + 'font-size:15px;font-weight:bold;color:#0f172a">' +
+    g.icono + '&nbsp; ' + g.titulo +
+    ' <span style="font-weight:normal;font-size:12px;color:#64748b;background:#f1f5f9;border-radius:10px;padding:2px 8px">' + g.items.length + '</span>' +
+    (g.urgentes ? ' <span style="font-weight:normal;font-size:12px;color:#be123c;background:#fff1f2;border-radius:10px;padding:2px 8px">' + g.urgentes + ' para hoy</span>' : '') +
+    '</td></tr>' + g.items.map(fila).join('') + '</table>';
+
+  const manana = new Date(dHoy.getTime() + 86400000).toISOString().slice(0, 10);
+  const bloqueAgenda = !agenda.length ? '' :
+    '<div style="' + FONT + 'font-size:13px;font-weight:bold;color:#64748b;margin:22px 0 8px">Hoy y mañana</div>' +
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #eef0f3">' +
+    agenda.map((e, i) => {
+      const t = AGENDA[e.tipo] || { texto: e.tipo, icono: '•' };
+      const url = link(e.clave);
+      const cuando = e.dia === hoyIso ? 'Hoy' : e.dia === manana ? 'Mañana' : e.dia;
+      return '<tr><td style="padding:10px 16px;' + (i ? 'border-top:1px solid #f1f5f9;' : '') + FONT + 'font-size:14px;color:#334155">' +
+        '<span style="display:inline-block;width:62px;font-weight:bold;color:' + (cuando === 'Hoy' ? '#0369a1' : '#64748b') + '">' + cuando + '</span>' +
+        t.icono + ' ' + t.texto + ' · ' +
+        (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(e) + '</a>' : '<b>' + op(e) + '</b>') +
+        '<span style="color:#94a3b8"> · ' + esc(e.cliente || '') + '</span></td>' +
+        '<td align="right" style="padding:10px 16px;' + (i ? 'border-top:1px solid #f1f5f9' : '') + '">' + chip(e.responsable) + '</td></tr>';
+    }).join('') + '</table>';
+
+  const boton = !app ? '' :
+    '<div style="text-align:center;margin:26px 0 8px"><a href="' + app + '" style="' + FONT +
+    'background:#0f766e;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;padding:12px 24px;border-radius:10px;display:inline-block">Abrir Operaciones Comex</a></div>';
+
+  const html =
+    '<div style="background:#f6f7f9;padding:20px 10px">' +
+    '<div style="max-width:620px;margin:0 auto">' +
+    '<div style="' + FONT + 'font-size:22px;font-weight:bold;color:#0f172a">Buen día 👋</div>' +
+    '<div style="' + FONT + 'font-size:14px;color:#64748b;margin:2px 0 14px">' + fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1) + '</div>' +
+    '<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 -4px 6px"><tr>' +
+    numero(urgentes.length, 'para resolver hoy', '#e11d48') +
+    numero(proximas, 'vencen en los próximos días', '#d97706') +
+    numero(agenda.length, 'cargas, consolidados y cortes hoy y mañana', '#0369a1') +
+    '</tr></table>' +
+    bloqueAgenda +
+    (grupos.length
+      ? '<div style="' + FONT + 'font-size:13px;font-weight:bold;color:#64748b;margin:18px 0 8px">Para hacer</div>' + grupos.map(tarjeta).join('')
+      : '<div style="' + FONT + 'background:#ffffff;border-radius:14px;border:1px solid #eef0f3;padding:22px;text-align:center;font-size:15px;color:#334155;margin-top:14px">🎉 No hay pendientes. Todo al día.</div>') +
+    boton +
+    '</div></div>';
+
+  const asunto = 'Comex ' + fechaCorta + ' · ' +
+    (urgentes.length ? urgentes.length + ' para resolver hoy' : 'nada vencido') +
+    (proximas ? ', ' + proximas + ' próximas' : '');
+  return { asunto, html };
 }
 
 // ============================================================
@@ -768,4 +871,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
