@@ -163,7 +163,17 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                     {p.nombre}
                   </div>
                   {a && (
-                    <div className={"text-xs " + (a.nivel === "vencida" ? "text-red-700" : "text-amber-700")}>{a.mensaje}</div>
+                    <div className={"text-xs " + (a.nivel === "vencida" ? "text-red-700" : "text-amber-700")}>
+                      {a.mensaje}
+                      {a.mail_url && (
+                        <>
+                          {" · "}
+                          <a href={a.mail_url} target="_blank" rel="noreferrer" className="underline">
+                            abrir el mail
+                          </a>
+                        </>
+                      )}
+                    </div>
                   )}
                   {e === "sin_registro" && !listaDe(o, p.codigo, hechos) && (
                     <div className="text-xs text-gray-400">No quedó registrado (la operación ya avanzó)</div>

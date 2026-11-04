@@ -86,7 +86,13 @@ function leerTodo() {
     return ult >= fila ? sh.getRange(fila, 1, ult - fila + 1, sh.getLastColumn()).getValues() : [];
   };
   const proyeccion = {};
-  Object.keys(CONFIG.PRO.hojas).forEach(h => { proyeccion[h] = leer(pro, h, CONFIG.PRO.filaTitulos); });
+  // La fila de títulos se busca sola (la que tiene "CV" en alguna celda), porque
+  // las solapas no siempre la tienen en la misma fila.
+  Object.keys(CONFIG.PRO.hojas).forEach(h => {
+    const filas = leer(pro, h, 1);
+    const iTit = filas.slice(0, 15).findIndex(f => f.some(x => sinAcentos(txt(x)).toLowerCase() === 'cv'));
+    proyeccion[h] = iTit >= 0 ? filas.slice(iTit) : filas.slice(CONFIG.PRO.filaTitulos - 1);
+  });
   return {
     ventas: leer(seg, CONFIG.VEN.hoja, CONFIG.VEN.fila),
     seguimiento: leer(seg, CONFIG.SEG.hoja, CONFIG.SEG.fila),
@@ -308,6 +314,8 @@ function armarMailDiario(alertas, agenda, app, ahora) {
       (url ? '<a href="' + url + '" style="color:#0f172a;font-weight:bold;text-decoration:none">' + op(a) + '</a>' : '<b>' + op(a) + '</b>') +
       ' <span style="color:#475569">· ' + esc(corto(a)) + '</span>' +
       '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + esc(a.cliente || '') + (a.destino ? ' · ' + esc(a.destino) : '') + '</div></td>' +
+      (a.mail_url ? '<td align="right" valign="top" style="white-space:nowrap;padding-left:8px"><a href="' + a.mail_url + '" style="' + FONT +
+        'font-size:12px;color:#0369a1;text-decoration:none;border:1px solid #e2e8f0;border-radius:8px;padding:3px 8px">✉️ Mail</a></td>' : '') +
       '</tr></table></td></tr>';
   };
 

@@ -53,6 +53,7 @@ export type Alerta = {
   mensaje: string;
   fecha_limite: string | null;
   en_mail: boolean;
+  mail_url?: string | null; // mail para contestar (o búsqueda en Gmail por CV)
 };
 
 export type Paso = { codigo: string; nombre: string; ayuda?: string };
