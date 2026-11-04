@@ -79,3 +79,23 @@ export async function cambiarResponsable(clave: string, responsable: string): Pr
   }
 }
 
+
+// Opciones de la operación: cancelarla, o decir si lleva anticipo / IP (null = automático).
+export async function cambiarOperacion(
+  clave: string,
+  campo: "cancelada" | "pide_anticipo" | "pide_ip",
+  valor: boolean | null
+): Promise<Resultado> {
+  try {
+    await editor();
+    const supabase = createClient();
+    const cambios: Record<string, boolean | null> = { [campo]: valor };
+    if (campo === "cancelada") cambios.activa = !valor;
+    const { error } = await supabase.from("op_operaciones").update(cambios).eq("clave", clave);
+    if (error) return { ok: false, error: error.message };
+    refrescar(clave);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}

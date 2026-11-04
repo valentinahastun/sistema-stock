@@ -536,7 +536,8 @@ function analizarMensajes(msgs) {
     // 2 y 3: hilo de Reymar "DRAFT - AG nnn"
     const ag = cvDeAg(asunto, m.fecha);
     if (ag) {
-      if (delEquipo(m) && /aprobad|confirmad|avanzar\s+con\s+(los\s+)?originales/i.test(sinAcentos(m.texto))) {
+      if (delEquipo(m) && /aprobad|confirmad|avanzar\s+con\s+(los\s+)?originales/i.test(sinAcentos(m.texto)) &&
+          !NO_APRUEBA.test(sinAcentos(m.texto))) {
         add(m, 'draft_aprobado', ag, true, 'Documentos aprobados (hilo con Reymar)');
       }
       // GMO: Reymar manda el borrador (y después el original) del GMO
@@ -576,7 +577,7 @@ function analizarMensajes(msgs) {
 
     // 7: el cliente o broker aprueba los drafts ("Drafts have been approved",
     //    "Proceder con originales"). El CV sale del asunto del hilo.
-    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto))) {
+    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) && !NO_APRUEBA.test(sinAcentos(m.texto))) {
       const cv = cvDeAsunto(asunto);
       add(m, 'draft_aprobado', cv, !!cv, cv ? 'El cliente aprobó los drafts (' + m.de + ')' : 'Aprobación de drafts sin CV en el asunto');
       return;
@@ -614,6 +615,9 @@ function analizarMensajes(msgs) {
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
 const APRUEBA_DRAFTS = /(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
+
+// Aprobación a medias: "drafts ok! Aguardo el resto de drafts", "falta el fito", "con estas correcciones"
+const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|aguardo\s+(los\s+)?(otros|demas)|falta|faltan|pendiente|correcci|corregir|comentarios|modificar|modificacion)/i;
 
 function esAdjuntoDraft(nombre) {
   const n = String(nombre).toLowerCase();
@@ -885,4 +889,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };

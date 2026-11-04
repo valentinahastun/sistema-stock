@@ -6,10 +6,13 @@ import SinAcceso from "@/components/SinAcceso";
 import PasoEditable from "@/components/PasoEditable";
 import SelectorResponsable from "@/components/SelectorResponsable";
 import Etapas from "@/components/Etapas";
+import OpcionesOperacion from "@/components/OpcionesOperacion";
 import {
   type Alerta,
   type Hito,
   type Operacion,
+  anticipoAuto,
+  ipAuto,
   listaDe,
   enPalabras,
   etapas,
@@ -86,7 +89,11 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                 📁 Abrir carpeta
               </a>
             )}
-            {!o.activa && <span className="text-xs rounded px-2 py-1 bg-gray-100 text-gray-600">Cerrada</span>}
+            {o.cancelada ? (
+              <span className="text-xs rounded px-2 py-1 bg-rose-50 text-rose-700">Cancelada</span>
+            ) : (
+              !o.activa && <span className="text-xs rounded px-2 py-1 bg-gray-100 text-gray-600">Cerrada</span>
+            )}
             {vencidas > 0 && (
               <span className="text-xs rounded px-2 py-1 bg-red-100 text-red-800">
                 {vencidas} {vencidas === 1 ? "alerta" : "alertas"}
@@ -115,6 +122,16 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
           <Dato t="ETA" v={fecha(o.eta, true)} />
           <Dato t="Contenedores" v={o.contenedores} wide />
         </dl>
+        {puedeEditar && (
+          <OpcionesOperacion
+            clave={o.clave}
+            cancelada={!!o.cancelada}
+            pideAnticipo={o.pide_anticipo ?? null}
+            pideIp={o.pide_ip ?? null}
+            anticipoAuto={anticipoAuto(o)}
+            ipAuto={ipAuto(o)}
+          />
+        )}
       </div>
 
       <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm p-5 space-y-5">

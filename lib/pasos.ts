@@ -26,6 +26,9 @@ export type Operacion = {
   etd: string | null;
   eta: string | null;
   activa: boolean;
+  cancelada?: boolean;
+  pide_anticipo?: boolean | null; // null: según las condiciones de pago
+  pide_ip?: boolean | null; // null: según el destino
 };
 
 export type Hito = {
@@ -54,11 +57,12 @@ export type Alerta = {
 
 export type Paso = { codigo: string; nombre: string; ayuda?: string };
 
-export const conAnticipo = (o: Operacion) =>
-  /(anticip|advance|adelant|previo)/i.test(o.payment_terms ?? "");
+export const anticipoAuto = (o: Operacion) => /(anticip|advance|adelant|previo)/i.test(o.payment_terms ?? "");
+export const conAnticipo = (o: Operacion) => o.pide_anticipo ?? anticipoAuto(o);
 
-export const pideIp = (o: Operacion) =>
+export const ipAuto = (o: Operacion) =>
   /(pakist|karachi|filipin|manila|venezuel|cabello|colombia|buenaventura|cartagena)/i.test(o.destino ?? "");
+export const pideIp = (o: Operacion) => o.pide_ip ?? ipAuto(o);
 
 export const esCopyDocs = (o: Operacion) => /cop/i.test(o.payment_terms ?? "");
 
