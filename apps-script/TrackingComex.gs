@@ -617,7 +617,7 @@ function analizarMensajes(msgs) {
 }
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
-const APRUEBA_DRAFTS = /(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
+const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
 
 // Aprobación a medias: "drafts ok! Aguardo el resto de drafts", "falta el fito", "con estas correcciones"
 const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|aguardo\s+(los\s+)?(otros|demas)|falta|faltan|pendiente|correcci|corregir|comentarios|modificar|modificacion)/i;
