@@ -49,6 +49,8 @@ export default function LoginPage() {
       setError(
         /signups not allowed|not found/i.test(error.message)
           ? "Ese mail no tiene usuario. Pedíselo a Valentina."
+          : /rate limit/i.test(error.message)
+          ? "Ya se mandaron varios links en la última hora. Esperá un rato o entrá con contraseña."
           : "No se pudo mandar el link: " + error.message
       );
       return;
