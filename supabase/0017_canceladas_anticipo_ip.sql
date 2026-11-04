@@ -27,6 +27,9 @@ create trigger op_no_reactivar_canceladas before insert or update on public.op_o
 
 delete from public.op_hitos
 where clave = '26-127' and paso = 'draft_aprobado' and fuente = 'mail';
+-- 26-127: el 20/10 se mandó solo el draft de BL; el juego de drafts salió el 29/10
+update public.op_hitos set fecha = '2026-10-29'
+where clave = '26-127' and paso = 'draft_enviado' and fuente = 'mail' and fecha < '2026-10-29';
 
 -- Canceladas: 26-126 A y B
 update public.op_operaciones set cancelada = true where cv = '26-126' and lote in ('A', 'B');

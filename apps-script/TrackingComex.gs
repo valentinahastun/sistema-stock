@@ -598,8 +598,11 @@ function analizarMensajes(msgs) {
         : 'Scan enviado sin CV en el nombre ni en el asunto (' + scans[0] + ')');
     }
 
-    // 1: drafts de documentos enviados al cliente
-    if (delEquipo(m) && m.adjuntos.some(esAdjuntoDraft) && m.para.some(esCliente)) {
+    // 1: drafts de documentos enviados al cliente. Si va solo el draft de BL no cuenta:
+    //    tiene que ir algún otro borrador (origen, prefito, ...) o 3 adjuntos o más.
+    const drafts = m.adjuntos.filter(esAdjuntoDraft);
+    const juego = drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length && m.adjuntos.length >= 3);
+    if (delEquipo(m) && juego && m.para.some(esCliente)) {
       const cv = cvDeAsunto(asunto);
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
