@@ -118,17 +118,6 @@ export default function VistaInicio({ alertas, eventos, hoy }: { alertas: Alerta
                           </span>
                         )}
                       </Link>
-                      {a.mail_url && (
-                        <a
-                          href={a.mail_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Abrir el mail en Gmail"
-                          className="shrink-0 mr-3 mt-1.5 text-xs rounded-md px-2 py-1 ring-1 ring-slate-200 text-slate-600 hover:bg-white hover:text-sky-700"
-                        >
-                          ✉️ Mail
-                        </a>
-                      )}
                     </li>
                   ))}
                 </ul>
