@@ -463,7 +463,7 @@ function leerMails() {
       para: direcciones(m.getTo() + ',' + m.getCc()),
       texto,
       adjuntos: verAdjuntos ? m.getAttachments({ includeInlineImages: false }).map(a => a.getName()) : [],
-      url: 'https://mail.google.com/mail/#search/' + encodeURIComponent('rfc822msgid:' + (m.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+      url: 'https://mail.google.com/mail/#all/' + m.getId(),
     });
   }));
 
@@ -504,7 +504,7 @@ function fechaBookings() {
     items.push({
       id: 'booking:' + o.clave + ':' + numeros.join('/'), fecha: primero.getDate().toISOString(),
       asunto: primero.getSubject() || '', remitente: direcciones(primero.getFrom())[0] || '',
-      url: 'https://mail.google.com/mail/#search/' + encodeURIComponent('rfc822msgid:' + (primero.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+      url: 'https://mail.google.com/mail/#all/' + primero.getId(),
       cv: o.clave.slice(0, 6), lote: o.clave.slice(6), paso: 'booking', seguro: true,
       motivo: 'Primer mail con el booking ' + numeros.join(' / '),
     });
@@ -878,8 +878,7 @@ function mailsPorOperacion() {
           const ultimo = msgs[msgs.length - 1];
           datos = {
             gente,
-            url: 'https://mail.google.com/mail/#search/' +
-              encodeURIComponent('rfc822msgid:' + (ultimo.getHeader('Message-ID') || '').replace(/[<>]/g, '')),
+            url: 'https://mail.google.com/mail/#all/' + ultimo.getId(),
           };
           return datos;
         },
