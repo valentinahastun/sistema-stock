@@ -577,9 +577,11 @@ function analizarMensajes(msgs) {
     if (delEquipo(m) && hablaDdee && m.para.some(esCliente)) {
       add(m, 'ddee_enviada', cvMail, !!cvMail, cvMail ? 'DDEE enviada a ' + m.para.filter(esCliente)[0] : 'DDEE enviada sin CV en el asunto');
     }
-    if (DDEE_OK.test(tx) &&
-        ((delEquipo(m) && (hablaDdee || m.ddeeHilo) && m.para.some(e => /reymar/i.test(e))) ||
-         (esCliente(m.de) && hablaDdee))) {
+    // El cliente la aprueba: "DDEE ok", "La declaración está ok", "DDEE approved"
+    const clienteAprueba = esCliente(m.de) && /\b(ddee|declaracion)\b/i.test(tx) &&
+      /\b(ok|okay|aprobad[ao]|approved|correct[ao]|conforme)\b/i.test(tx) && !NO_APRUEBA.test(tx);
+    if ((DDEE_OK.test(tx) && delEquipo(m) && (hablaDdee || m.ddeeHilo) && m.para.some(e => /reymar/i.test(e))) ||
+        clienteAprueba) {
       add(m, 'ddee_aprobada', cvMail, !!cvMail, cvMail ? 'DDEE aprobada (' + m.de + ')' : 'DDEE aprobada sin CV en el asunto');
     }
 
