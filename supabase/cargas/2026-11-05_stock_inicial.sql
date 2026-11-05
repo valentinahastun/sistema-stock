@@ -21,7 +21,7 @@ insert into _carga (planta, producto, productor, estado, tn, obs) values
   ('LEGUCER', 'Poroto Colorado Dark', 'La Bajada', 'procesado', 0.030, 'Stock inicial 05/11/2026 · Proceso 71 · CV 26-099'),
   ('CABALLERO LUIS ALBERTO', 'Poroto Cranberry', 'El Valle', 'procesado', 0.865, 'Stock inicial 05/11/2026 · CV 26-073'),
   ('CABALLERO LUIS ALBERTO', 'Poroto Alubia', 'Giacopo Bruno', 'procesado', 18.200, 'Stock inicial 05/11/2026 · CV 26-080 A'),
-  ('CABALLERO LUIS ALBERTO', 'Poroto Alubia', 'Expo Gram', 'procesado', 59.525, 'Stock inicial 05/11/2026 · CV 26-118'),
+  ('CABALLERO LUIS ALBERTO', 'Poroto Alubia', 'Expogran', 'procesado', 59.525, 'Stock inicial 05/11/2026 · CV 26-118'),
   ('CABALLERO LUIS ALBERTO', 'Poroto Alubia', 'Los Dos Rios', 'procesado', 12.275, 'Stock inicial 05/11/2026 · CV 26-137'),
   -- Descarte en stock
   ('LEGUCER', 'Descarte Negro', '-', 'natural', 0.837, 'Descarte inicial 05/11/2026 · Proceso 46 · CV 26-071, 26-081 B, 26-088 A'),
@@ -33,7 +33,7 @@ insert into _carga (planta, producto, productor, estado, tn, obs) values
   ('CABALLERO LUIS ALBERTO', 'Descarte Dark', 'CEF', 'natural', 6.210, 'Descarte inicial 05/11/2026 · CV 26-093'),
   ('CABALLERO LUIS ALBERTO', 'Descarte Cranberry', 'El Valle', 'natural', 22.275, 'Descarte inicial 05/11/2026 · CV 26-073'),
   ('CABALLERO LUIS ALBERTO', 'Descarte Alubia', 'Flores Enrique', 'natural', 18.010, 'Descarte inicial 05/11/2026 · CV 26-086'),
-  ('CABALLERO LUIS ALBERTO', 'Descarte Alubia', 'Expo Gram', 'natural', 11.380, 'Descarte inicial 05/11/2026 · CV 26-118'),
+  ('CABALLERO LUIS ALBERTO', 'Descarte Alubia', 'Expogran', 'natural', 11.380, 'Descarte inicial 05/11/2026 · CV 26-118'),
   ('CABALLERO LUIS ALBERTO', 'Descarte Alubia', 'Baya Casal', 'natural', 43.715, 'Descarte inicial 05/11/2026 · CV 26-095, 26-103'),
   ('CABALLERO LUIS ALBERTO', 'Descarte Alubia', 'Los Dos Rios', 'natural', 6.505, 'Descarte inicial 05/11/2026 · CV 26-137'),
   ('ALIMENTOS TROPICALES', 'Descarte Alubia', 'Palacios Pantaleon', 'natural', 1.230, 'Descarte inicial 05/11/2026 · CV 26-092'),
