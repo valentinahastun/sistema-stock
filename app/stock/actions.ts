@@ -200,3 +200,29 @@ export async function confirmarCaidaEstimada(
     return { ok: false, error: (e as Error).message };
   }
 }
+
+// Cantidad de bolsas de un lote procesado (25 kg, 50 kg y big bags).
+// Un campo vacío queda sin dato.
+export async function guardarBolsas(
+  loteId: string,
+  bolsas: { bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null }
+): Promise<Resultado> {
+  try {
+    const perfil = await getPerfilActual();
+    if (!perfil || perfil.rol !== "admin") {
+      return { ok: false, error: "Solo el usuario administrador puede cargarlo." };
+    }
+    for (const v of Object.values(bolsas)) {
+      if (v !== null && (!Number.isInteger(v) || v < 0)) {
+        return { ok: false, error: "Las cantidades tienen que ser números enteros (sin decimales)." };
+      }
+    }
+    const supabase = createClient();
+    const { error } = await supabase.from("lotes").update(bolsas).eq("id", loteId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/stock");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
