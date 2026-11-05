@@ -62,7 +62,6 @@ export default async function Portada() {
         { href: "/stock", texto: "Stock" },
         { href: "/ingresos", texto: "Ingresos" },
         { href: "/egresos", texto: "Egresos" },
-        { href: "/directos", texto: "Directos" },
       ],
     });
   }

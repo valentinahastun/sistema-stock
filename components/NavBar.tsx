@@ -23,12 +23,11 @@ export default async function NavBar() {
   if (a.stock) {
     grupos.push({
       nombre: "Stock",
-      base: "/stock|/ingresos|/egresos|/directos|/movimientos|/catalogos|/auditoria",
+      base: "/stock|/ingresos|/egresos|/movimientos|/catalogos|/auditoria",
       items: [
         { href: "/stock", texto: "Stock" },
         { href: "/ingresos", texto: "Ingresos" },
         { href: "/egresos", texto: "Egresos" },
-        { href: "/directos", texto: "Directos" },
         ...(admin
           ? [
               { href: "/movimientos", texto: "Cargar movimiento" },

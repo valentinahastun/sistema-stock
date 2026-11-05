@@ -532,7 +532,6 @@ export default function MovimientoForm({
         {([
           { valor: "ingreso" as const, etiqueta: "Ingreso" },
           { valor: "egreso" as const, etiqueta: "Egreso" },
-          { valor: "directo" as const, etiqueta: "Directo" },
         ]).map((t) => (
           <button
             key={t.valor}
