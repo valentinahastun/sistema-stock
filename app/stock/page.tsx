@@ -26,11 +26,11 @@ export default async function StockPage({
         )
         .order("fecha_ingreso", { ascending: false }),
       supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
-      supabase.from("lotes").select("id, bolsas_25, bolsas_50, big_bags"),
+      supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags"),
     ]);
 
   // Bolsas de cada lote (25 kg, 50 kg, big bags)
-  const bolsasPorLote = new Map<string, { bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null }>();
+  const bolsasPorLote = new Map<string, { cv: string | null; bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null }>();
   (bolsas ?? []).forEach((b: any) => bolsasPorLote.set(b.id, b));
 
   // Descarte real ya cargado en cada lote (para los lotes procesados)
@@ -55,6 +55,7 @@ export default async function StockPage({
       bolsas_25: bolsasPorLote.get(l.lote_id)?.bolsas_25 ?? null,
       bolsas_50: bolsasPorLote.get(l.lote_id)?.bolsas_50 ?? null,
       big_bags: bolsasPorLote.get(l.lote_id)?.big_bags ?? null,
+      cv: bolsasPorLote.get(l.lote_id)?.cv ?? null,
     });
     lotesPorClave.set(clave, lista);
   });

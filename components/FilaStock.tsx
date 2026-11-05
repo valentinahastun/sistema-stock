@@ -16,6 +16,7 @@ export type LoteDetalle = {
   bolsas_25?: number | null; // bolsas de 25 kg
   bolsas_50?: number | null; // bolsas de 50 kg
   big_bags?: number | null;
+  cv?: string | null; // CV al que está comprometido el lote
 };
 
 export type FilaBase = {
@@ -240,6 +241,7 @@ function DetalleLotes({
           <th className="px-2 py-1">Fecha</th>
           <th className="px-2 py-1">Productor</th>
           <th className="px-2 py-1">CP</th>
+          <th className="px-2 py-1">CV</th>
           <th className="px-2 py-1">Estado</th>
           <th className="px-2 py-1">Bolsas</th>
           <th className="px-2 py-1 text-right">Stock actual (tn)</th>
@@ -379,6 +381,13 @@ function FilaLote({
       <td className="px-2 py-1.5 whitespace-nowrap">{lote.fecha_ingreso}</td>
       <td className="px-2 py-1.5">{lote.productor}</td>
       <td className="px-2 py-1.5">{lote.numero_cp ?? "—"}</td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        {lote.cv ? (
+          <span className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5">{lote.cv}</span>
+        ) : (
+          <span className="text-gray-400">libre</span>
+        )}
+      </td>
       <td className="px-2 py-1.5 capitalize">{lote.estado}</td>
       <td className="px-2 py-1.5">
         {lote.estado === "natural" ? "—" : <CeldaBolsas lote={lote} puedeEditar={puedeEditar} />}
