@@ -5,6 +5,8 @@ export type Evento = { dia: string; tipo: "carga" | "consolidado" | "corte"; op:
 
 // Cómo se agrupan las alertas: una tarjeta por tipo de tarea.
 const GRUPOS: { paso: string; titulo: string; icono: string }[] = [
+  { paso: "proforma", titulo: "Proformas para enviar", icono: "🧾" },
+  { paso: "ddee_aprobada", titulo: "DDEE para aprobar", icono: "✅" },
   { paso: "etiqueta", titulo: "Etiquetas por aprobar", icono: "🏷️" },
   { paso: "anticipo", titulo: "Anticipos por cobrar", icono: "💵" },
   { paso: "ip", titulo: "IP por emitir", icono: "📑" },

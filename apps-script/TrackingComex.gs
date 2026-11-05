@@ -36,7 +36,7 @@ const CONFIG = {
 
   VEN: { hoja: 'VENTAS', fila: 2, fecha: 'A', cv: 'B', firmado: 'C', producto: 'D', tn: 'G',
          buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
-  SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', consolidado: 'H',
+  SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', proforma: 'G', consolidado: 'H',
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
          etd: 'AO', eta: 'AP', cobro: 'AX' },
   FLE: { hoja: 'PAGOS FLETES', fila: 9, cv: 'B', estado: 'M' },
@@ -231,7 +231,10 @@ function armarDatos(t) {
     if (s && esFecha(s[col(S.carga)])) hito(k, 'camiones', s[col(S.carga)], 'seguimiento');
     if (o.contenedores) hito(k, 'retiro', null, 'seguimiento', o.contenedores);
     if (s && esFecha(s[col(S.consolidado)])) hito(k, 'consolidado', s[col(S.consolidado)], 'seguimiento');
-    if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'ddee', s[col(S.fechaOfi)], 'seguimiento', 'Permiso oficializado');
+    const nProforma = txt(s && s[col(S.proforma)]);
+    if (nProforma && nProforma !== '-') hito(k, 'proforma', null, 'seguimiento', 'Proforma ' + nProforma);
+    // Columna AB: fecha de oficialización del PE (permiso de embarque)
+    if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'pe', s[col(S.fechaOfi)], 'seguimiento', 'PE oficializado');
     if (s && esFecha(s[col(S.cobro)])) hito(k, 'cobranza', s[col(S.cobro)], 'seguimiento');
     const ant = anticipo[k] || anticipo[k.slice(0, 6)];
     if (ant) hito(k, 'anticipo', null, 'cobranzas', 'Anticipo en COBRANZAS: ' + ant.toLocaleString('en-US') + ' USD');
@@ -264,6 +267,8 @@ const TAREAS = [
   { paso: 'draft_aprobado', titulo: 'Consultar aprobación de drafts', icono: '📄' },
   { paso: 'originales', titulo: 'Reclamar originales', icono: '📦' },
   { paso: 'gmo', titulo: 'Reclamar GMO original', icono: '🧬' },
+  { paso: 'proforma', titulo: 'Enviar proforma', icono: '🧾' },
+  { paso: 'ddee_aprobada', titulo: 'Aprobar DDEE', icono: '✅' },
   { paso: 'etiqueta', titulo: 'Aprobar etiquetas', icono: '🏷️' },
   { paso: 'anticipo', titulo: 'Consultar anticipos', icono: '💵' },
   { paso: 'ip', titulo: 'Pedir IP', icono: '📑' },
@@ -438,7 +443,10 @@ function leerMails() {
     '{' + MAIL.FORWARDERS.map(f => 'from:' + f).join(' ') + '} {draft borrador} ' + despues,
     equipo + ' {subject:envio subject:envío} {subject:documentacion subject:documentación subject:documentos subject:docus} ' + despues,
     equipo + ' subject:apertura subject:cobranza ' + despues,
-    '-from:argreen.com.ar {approved aprobados aprobado "proceder con originales" "proceed to the originals" "proceed with the originals"} ' + despues,
+    '-from:argreen.com.ar {approved aprobados aprobado ok "proceder con" "proceed to the originals" "proceed with the originals"} ' + despues,
+    // Proforma / datos del PE que mandan a Reymar, y la DDEE (Reymar la manda, se reenvía al cliente y se aprueba)
+    equipo + ' to:reymar.com.ar {subject:proforma subject:PE} ' + despues,
+    'DDEE ' + despues,
   ];
   const vistos = {};
   const hilos = [];
@@ -451,7 +459,11 @@ function leerMails() {
   });
 
   const msgs = [];
-  hilos.forEach(h => h.getMessages().forEach(m => {
+  hilos.forEach(h => {
+    const todos = h.getMessages();
+    // ¿Reymar mandó una DDEE en este hilo? (aunque sea antes de la última lectura)
+    const ddeeHilo = todos.some(m => /reymar/i.test(m.getFrom()) && /\bddee\b/i.test(m.getPlainBody() || ''));
+    todos.forEach(m => {
     if (m.getDate() < desde) return;
     const de = direcciones(m.getFrom())[0] || '';
     const texto = textoPropio(m.getPlainBody() || '');
@@ -469,8 +481,10 @@ function leerMails() {
       texto,
       adjuntos: verAdjuntos ? m.getAttachments({ includeInlineImages: false }).map(a => a.getName()) : [],
       url: 'https://mail.google.com/mail/#all/' + m.getId(),
+      ddeeHilo,
     });
-  }));
+    });
+  });
 
   const items = analizarMensajes(msgs);
   let r = { nuevos: 0, aplicados: 0, pendientes: 0 };
@@ -545,6 +559,29 @@ function analizarMensajes(msgs) {
 
   msgs.forEach(m => {
     const asunto = m.hiloAsunto || m.asunto;
+    const cvMail = cvDeAsunto(m.asunto) || cvDeAsunto(asunto);
+
+    // 9: proforma / datos para oficializar el PE: "PROFORMA CV 26-131 ...", "CV 26-113 PROFORMA ...", "PE CV 26-132 ..."
+    if (delEquipo(m) && m.para.some(e => /reymar/i.test(e)) &&
+        (/\bproforma\b/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto))) {
+      add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma enviada a Reymar' : 'Proforma enviada sin CV en el asunto');
+    }
+
+    // 10: DDEE. Reymar la manda (después del consolidado), se reenvía al cliente y se aprueba
+    //     ("DDEE ok", "proceder con draft", "lo veo ok", "adjunto DDEE definitiva", "tomar como válida la DDEE de este correo")
+    const tx = sinAcentos(m.texto);
+    const hablaDdee = /\bddee\b/i.test(tx) || m.adjuntos.some(a => /ddee/i.test(a));
+    if (/reymar/i.test(m.de) && hablaDdee) {
+      add(m, 'ddee_recibida', cvMail, !!cvMail, cvMail ? 'Reymar mandó la DDEE' : 'DDEE de Reymar sin CV en el asunto');
+    }
+    if (delEquipo(m) && hablaDdee && m.para.some(esCliente)) {
+      add(m, 'ddee_enviada', cvMail, !!cvMail, cvMail ? 'DDEE enviada a ' + m.para.filter(esCliente)[0] : 'DDEE enviada sin CV en el asunto');
+    }
+    if (DDEE_OK.test(tx) &&
+        ((delEquipo(m) && (hablaDdee || m.ddeeHilo) && m.para.some(e => /reymar/i.test(e))) ||
+         (esCliente(m.de) && hablaDdee))) {
+      add(m, 'ddee_aprobada', cvMail, !!cvMail, cvMail ? 'DDEE aprobada (' + m.de + ')' : 'DDEE aprobada sin CV en el asunto');
+    }
 
     // 2 y 3: hilo de Reymar "DRAFT - AG nnn"
     const ag = cvDeAg(asunto, m.fecha);
@@ -640,6 +677,7 @@ const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+at
 const PROCEDER_ORIGINALES = /^(?![\s\S]*\b(una vez|cuando|antes de|no)\s+[^.\n]{0,30}(proced|avanz))[\s\S]*\b(proceder|procedan|procede|avanzar|avancen|seguir)\s+con\s+(los\s+)?originales/i;
 
 // Aprobación a medias: "drafts ok! Aguardo el resto de drafts", "falta el fito", "con estas correcciones"
+const DDEE_OK = /\bddee\b[^.\n]{0,20}\b(ok|aprobada|autorizada|correcta|approved)\b|proceder\s+con\s+(el\s+|los\s+)?drafts?|lo\s+veo\s+ok|adjunto\s+(la\s+)?ddee\s+definitiva|tom(a|e|en|ar|as|ad)\s+como\s+valida\s+(la\s+)?ddee/i;
 const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|aguardo\s+(los\s+)?(otros|demas)|falta|faltan|pendiente|correcci|corregir|comentarios|modificar|modificacion)/i;
 
 function esAdjuntoDraft(nombre) {
@@ -924,4 +962,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
