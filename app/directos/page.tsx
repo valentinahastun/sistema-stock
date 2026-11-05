@@ -21,7 +21,7 @@ export default async function DirectosPage() {
   const { data: movimientos } = await supabase
     .from("movimientos_stock")
     .select(
-      "id, cantidad, cantidad_descargada, fecha, observaciones, numero_cp, transportista, chofer, patente, titular, productor_texto, destino, productos(nombre)"
+      "id, cantidad, cantidad_descargada, fecha, observaciones, controlo_carga, numero_cp, transportista, chofer, patente, titular, productor_texto, destino, productos(nombre)"
     )
     .eq("tipo", "directo")
     .order("fecha", { ascending: false })
@@ -33,6 +33,7 @@ export default async function DirectosPage() {
     cantidad_descargada: number | null;
     fecha: string;
     observaciones: string | null;
+    controlo_carga: string | null;
     numero_cp: string | null;
     transportista: string | null;
     chofer: string | null;
@@ -88,7 +89,8 @@ export default async function DirectosPage() {
                       {[f.transportista, f.chofer, f.patente].filter(Boolean).join(" · ")}
                     </div>
                   )}
-                  {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && "—"}
+                  {f.controlo_carga && <div className="text-gray-500">Controló: {f.controlo_carga}</div>}
+                  {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && !f.controlo_carga && "—"}
                 </td>
                 <td className="px-4 py-2 text-gray-600">{f.titular ?? "—"}</td>
                 <td className="px-4 py-2 text-gray-600">{f.productor_texto ?? "—"}</td>

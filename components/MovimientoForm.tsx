@@ -572,6 +572,10 @@ export default function MovimientoForm({
               />
             </Campo>
 
+            <Campo label="Quién controló la carga">
+              <input name="controlo_carga" className="input" placeholder="Nombre de quien estuvo en la carga" />
+            </Campo>
+
             <Campo label="Cantidad (toneladas)">
               <input
                 name="cantidad"
@@ -678,6 +682,10 @@ export default function MovimientoForm({
                 value={patente}
                 onChange={(e) => setPatente(e.target.value)}
               />
+            </Campo>
+
+            <Campo label="Quién controló la carga">
+              <input name="controlo_carga" className="input" placeholder="Nombre de quien estuvo en la carga" />
             </Campo>
 
             <Campo label="Destino (a dónde va, según la CP)">
@@ -795,6 +803,10 @@ export default function MovimientoForm({
                 value={patente}
                 onChange={(e) => setPatente(e.target.value)}
               />
+            </Campo>
+
+            <Campo label="Quién controló la carga">
+              <input name="controlo_carga" className="input" placeholder="Nombre de quien estuvo en la carga" />
             </Campo>
 
             <Campo label="Cantidad cargada (toneladas)">

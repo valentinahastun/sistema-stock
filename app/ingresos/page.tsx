@@ -25,7 +25,7 @@ export default async function IngresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, observaciones, lotes!lote_id(numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
+        "id, cantidad, fecha, observaciones, controlo_carga, lotes!lote_id(numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
       .order("fecha", { ascending: false })
@@ -37,6 +37,7 @@ export default async function IngresosPage({
     cantidad: number;
     fecha: string;
     observaciones: string | null;
+    controlo_carga: string | null;
     lotes: {
       numero_cp: string | null;
       transportista: string | null;
@@ -112,10 +113,12 @@ export default async function IngresosPage({
                         .join(" · ")}
                     </div>
                   )}
+                  {f.controlo_carga && <div className="text-gray-500">Controló: {f.controlo_carga}</div>}
                   {!f.lotes?.numero_cp &&
                     !f.lotes?.transportista &&
                     !f.lotes?.chofer &&
                     !f.lotes?.patente &&
+                    !f.controlo_carga &&
                     "—"}
                 </td>
                 <td className="px-4 py-2 text-right font-medium">
