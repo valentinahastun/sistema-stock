@@ -629,6 +629,10 @@ export default function MovimientoForm({
               </select>
             </Campo>
 
+            <Campo label="CV (si la salida es para una operación; baja lo comprometido)">
+              <input name="cv" className="input" placeholder="Ej.: 26-124" />
+            </Campo>
+
             <Campo label="Productor (opcional, solo a modo de registro)">
               <select name="productor_id" className="input">
                 <option value="">No especificar</option>
