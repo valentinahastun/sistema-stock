@@ -64,7 +64,7 @@ export default function VistaInicio({ alertas, eventos, hoy }: { alertas: Alerta
       {/* Resumen */}
       <div className="grid grid-cols-3 gap-3">
         <Numero n={vencidas} texto="para resolver hoy" clase="text-rose-600" punto="bg-rose-400" />
-        <Numero n={proximas} texto="vencen en los próximos días" clase="text-amber-600" punto="bg-amber-400" />
+        <Numero n={proximas} texto="para resolver en los próximos días" clase="text-amber-600" punto="bg-amber-400" />
         <Numero n={eventos.length} texto="cargas, consolidados y cortes esta semana" clase="text-sky-700" punto="bg-sky-400" />
       </div>
 
