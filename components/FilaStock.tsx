@@ -17,6 +17,7 @@ export type LoteDetalle = {
   bolsas_50?: number | null; // bolsas de 50 kg
   big_bags?: number | null;
   cv?: string | null; // CV al que está comprometido el lote
+  salidas_tn?: number; // egresos (por planta/producto) que se descuentan de este lote
 };
 
 export type FilaBase = {
@@ -392,7 +393,12 @@ function FilaLote({
       <td className="px-2 py-1.5">
         {lote.estado === "natural" ? "—" : <CeldaBolsas lote={lote} puedeEditar={puedeEditar} />}
       </td>
-      <td className="px-2 py-1.5 text-right">{lote.stock_actual_tn.toFixed(2)}</td>
+      <td className="px-2 py-1.5 text-right">
+        {lote.stock_actual_tn.toFixed(2)}
+        {lote.salidas_tn ? (
+          <div className="text-[10px] text-gray-400">salieron {lote.salidas_tn.toFixed(2)}</div>
+        ) : null}
+      </td>
       {!esDescarte && (
         <>
           <td className="px-2 py-1.5 text-right">
