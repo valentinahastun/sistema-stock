@@ -26,7 +26,7 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, cv, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, cantidad, fecha, motivo, observaciones, cv, controlo_carga, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
       .order("fecha", { ascending: false })
@@ -40,6 +40,7 @@ export default async function EgresosPage({
     motivo: string | null;
     observaciones: string | null;
     cv: string | null;
+    controlo_carga: string | null;
     numero_cp: string | null;
     transportista: string | null;
     chofer: string | null;
@@ -143,7 +144,8 @@ export default async function EgresosPage({
                         {[f.transportista, f.chofer, f.patente].filter(Boolean).join(" · ")}
                       </div>
                     )}
-                    {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && "—"}
+                    {f.controlo_carga && <div className="text-gray-500">Controló: {f.controlo_carga}</div>}
+                    {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && !f.controlo_carga && "—"}
                   </td>
                   <td className="px-4 py-2 text-gray-600">{f.destino ?? "—"}</td>
                   <td className="px-4 py-2">

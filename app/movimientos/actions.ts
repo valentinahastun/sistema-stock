@@ -29,6 +29,7 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
     const transportista = (formData.get("transportista") as string) || null;
     const chofer = (formData.get("chofer") as string) || null;
     const patente = (formData.get("patente") as string) || null;
+    const controlo_carga = ((formData.get("controlo_carga") as string) || "").trim() || null;
     const fecha_ingreso = formData.get("fecha") as string;
     const cantidad = Number(formData.get("cantidad"));
     const observaciones = (formData.get("observaciones") as string) || null;
@@ -64,6 +65,7 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
       cantidad,
       fecha: fecha_ingreso,
       observaciones,
+      ...(controlo_carga ? { controlo_carga } : {}),
     });
 
     if (errorMov) {
@@ -93,6 +95,7 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
     const transportista = (formData.get("transportista") as string) || null;
     const chofer = (formData.get("chofer") as string) || null;
     const patente = (formData.get("patente") as string) || null;
+    const controlo_carga = ((formData.get("controlo_carga") as string) || "").trim() || null;
     const titular = (formData.get("titular") as string) || null;
     const productor_texto = (formData.get("productor_texto") as string) || null;
     const destino = (formData.get("destino") as string) || null;
@@ -120,6 +123,7 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
       cantidad_descargada,
       fecha,
       observaciones,
+      ...(controlo_carga ? { controlo_carga } : {}),
     });
 
     if (error) {
@@ -151,6 +155,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
     const transportista = (formData.get("transportista") as string) || null;
     const chofer = (formData.get("chofer") as string) || null;
     const patente = (formData.get("patente") as string) || null;
+    const controlo_carga = ((formData.get("controlo_carga") as string) || "").trim() || null;
     const destino = (formData.get("destino") as string) || null;
     const cantidad = Number(formData.get("cantidad"));
     const fecha = formData.get("fecha") as string;
@@ -196,6 +201,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       fecha,
       observaciones,
       cv,
+      ...(controlo_carga ? { controlo_carga } : {}),
     });
 
     if (error) {
