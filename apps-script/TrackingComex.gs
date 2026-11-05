@@ -215,9 +215,9 @@ function armarDatos(t) {
     o.tipo_bl = txt(s && s[col(S.tipoBl)]);
     o.booking = txt(pr && pr('nBooking')) || txt(s && s[col(S.booking)]);
     o.contenedores = (contenedores[k] || []).join(', ');
-    o.fecha_carga_planta = isoOrNull(pr && pr('carga'));
-    o.fecha_consolidado = isoOrNull(pr && pr('consolidado'));
-    o.corte_documental = isoOrNull(pr && pr('corte'));
+    o.fecha_carga_planta = fechaCelda(pr && pr('carga'));
+    o.fecha_consolidado = fechaCelda(pr && pr('consolidado'));
+    o.corte_documental = fechaCelda(pr && pr('corte'));
     o.lugar_carga = txt(pr && pr('lugar'));
     o.deposito = txt(pr && pr('deposito')) || txt(s && s[col(S.deposito)]);
     o.etd = isoOrNull(pr && pr('etd')) || isoOrNull(s && s[col(S.etd)]);
@@ -592,7 +592,8 @@ function analizarMensajes(msgs) {
     //    "Proceder con originales"). El CV sale del asunto del hilo.
     if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) &&
         (!NO_APRUEBA.test(sinAcentos(m.texto)) || PROCEDER_ORIGINALES.test(sinAcentos(m.texto)))) {
-      const cv = cvDeAsunto(asunto);
+      // El CV puede estar solo en el asunto de la respuesta ("RE: CV 26-110 // MC26652 ...")
+      const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
       add(m, 'draft_aprobado', cv, !!cv, cv ? 'El cliente aprobó los drafts (' + m.de + ')' : 'Aprobación de drafts sin CV en el asunto');
       return;
     }
@@ -607,7 +608,7 @@ function analizarMensajes(msgs) {
     // 5: scan de los originales
     const scans = delEquipo(m) ? m.adjuntos.filter(a => /scan/i.test(a)) : [];
     if (scans.length) {
-      const cv = scans.map(cvDeAsunto).filter(Boolean)[0] || cvDeAsunto(asunto);
+      const cv = scans.map(cvDeAsunto).filter(Boolean)[0] || cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
       add(m, 'originales', cv, !!cv, cv ? 'Se envió el scan de originales (' + scans[0] + ')'
         : 'Scan enviado sin CV en el nombre ni en el asunto (' + scans[0] + ')');
     }
@@ -617,7 +618,7 @@ function analizarMensajes(msgs) {
     const drafts = m.adjuntos.filter(esAdjuntoDraft);
     const juego = drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length && m.adjuntos.length >= 3);
     if (delEquipo(m) && juego && m.para.some(esCliente)) {
-      const cv = cvDeAsunto(asunto);
+      const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
         : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
@@ -907,6 +908,18 @@ function iso(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function isoOrNull(v) { return esFecha(v) ? iso(v) : null; }
+// Celda de fecha de PROYECCION: puede ser fecha o texto con una o más fechas
+// ("10/11/2026\n11/11/2026" = carga en dos días): se toma la primera.
+function fechaCelda(v) {
+  if (esFecha(v)) return iso(v);
+  const m = String(v || '').match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (!m) return null;
+  const hoy = new Date();
+  let a = m[3] ? Number(m[3]) : hoy.getFullYear();
+  if (a < 100) a += 2000;
+  const d = new Date(a, Number(m[2]) - 1, Number(m[1]));
+  return esFecha(d) && d.getDate() === Number(m[1]) ? iso(d) : null;
+}
 function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
