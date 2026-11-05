@@ -155,9 +155,14 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
     const cantidad = Number(formData.get("cantidad"));
     const fecha = formData.get("fecha") as string;
     const observaciones = (formData.get("observaciones") as string) || null;
+    const cvTexto = ((formData.get("cv") as string) || "").trim();
+    const cv = cvTexto ? normalizarCv(cvTexto) : null;
 
     if (!planta_id || !producto_id || !cantidad) {
       return { ok: false, error: "Faltan datos obligatorios." };
+    }
+    if (cvTexto && !cv) {
+      return { ok: false, error: `No entendí el CV "${cvTexto}". Escribilo como 26-124 o 26-115 A.` };
     }
 
     const { data: stockFila } = await supabase
@@ -190,6 +195,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       cantidad,
       fecha,
       observaciones,
+      cv,
     });
 
     if (error) {
@@ -422,4 +428,13 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
+}
+
+// "124", "26-124", "CV 26-115 A", "26-115a" -> "CV 26-124" / "CV 26-115 A"
+function normalizarCv(texto: string): string | null {
+  const s = texto.toUpperCase().replace(/^\s*CV\s*/, "").trim();
+  const m = s.match(/^(?:(\d{2})\s*-\s*)?(\d{1,3})\s*([A-Z])?$/);
+  if (!m) return null;
+  const anio = m[1] ?? "26";
+  return `CV ${anio}-${m[2].padStart(3, "0")}${m[3] ? " " + m[3] : ""}`;
 }
