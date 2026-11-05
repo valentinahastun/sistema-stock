@@ -237,6 +237,16 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
     }
 
     if (movimiento.tipo === "ingreso") {
+      // Ingreso de un lote de descarte generado por la caída de otro lote
+      // (ej: Descarte Alubia): se deshace desde el descarte que lo generó,
+      // que borra las dos cosas y deja el lote original otra vez "natural".
+      const { data: origen } = await supabase
+        .from("movimientos_stock")
+        .select("id")
+        .eq("descarte_generado_lote_id", movimiento.lote_id)
+        .maybeSingle();
+      if (origen) return eliminarMovimiento(origen.id);
+
       const { count: otrosMovimientos } = await supabase
         .from("movimientos_stock")
         .select("id", { count: "exact", head: true })
