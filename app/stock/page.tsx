@@ -76,24 +76,29 @@ export default async function StockPage({
     const procesados = (lotesPorClave.get(clave) ?? [])
       .filter((l) => l.estado !== "natural")
       .sort((a, b) => (a.fecha_ingreso < b.fecha_ingreso ? -1 : 1));
-    const descontar = (cantidad: number, candidatos: LoteDetalle[]) => {
+    const descontar = (cantidad: number, cv: string | null, candidatos: LoteDetalle[]) => {
       let resto = cantidad;
       for (const l of candidatos) {
         if (resto <= 0) break;
         const sale = Math.min(resto, Math.max(l.stock_actual_tn, 0));
+        if (sale <= 0) continue;
         l.stock_actual_tn -= sale;
         l.salidas_tn = (l.salidas_tn ?? 0) + sale;
+        const salidas = (l.salidas = l.salidas ?? []);
+        const ya = salidas.find((s) => s.cv === cv);
+        if (ya) ya.tn += sale;
+        else salidas.push({ cv, tn: sale });
         resto -= sale;
       }
       return resto;
     };
     lista.filter((e) => e.cv).forEach((e) => {
-      const resto = descontar(e.cantidad, procesados.filter((l) => l.cv === e.cv));
-      if (resto > 0) descontar(resto, procesados);
+      const resto = descontar(e.cantidad, e.cv, procesados.filter((l) => l.cv === e.cv));
+      if (resto > 0) descontar(resto, e.cv, procesados);
     });
     lista.filter((e) => !e.cv).forEach((e) => {
-      const resto = descontar(e.cantidad, procesados.filter((l) => !l.cv));
-      if (resto > 0) descontar(resto, procesados);
+      const resto = descontar(e.cantidad, null, procesados.filter((l) => !l.cv));
+      if (resto > 0) descontar(resto, null, procesados);
     });
   });
 
