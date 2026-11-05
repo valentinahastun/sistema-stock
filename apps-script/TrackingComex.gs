@@ -385,7 +385,7 @@ function armarMailDiario(alertas, agenda, app, ahora) {
     '<div style="' + FONT + 'font-size:14px;color:#64748b;margin:2px 0 14px">' + fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1) + '</div>' +
     '<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 -4px 6px"><tr>' +
     numero(urgentes.length, 'para resolver hoy', '#e11d48') +
-    numero(proximas, 'vencen en los próximos días', '#d97706') +
+    numero(proximas, 'para resolver en los próximos días', '#d97706') +
     numero(agenda.length, 'cargas, consolidados y cortes hoy y mañana', '#0369a1') +
     '</tr></table>' +
     (alertas.length || agenda.length ? PERSONAS.map(seccion).join('') :
@@ -671,7 +671,7 @@ function analizarMensajes(msgs) {
 }
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
-const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documentos|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
+const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documento?s|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
 
 // "Proceder con originales" es aprobación aunque pida algún retoque en el mismo mail
 // ("Solo habría que hacer esas modificaciones y proceder con originales"), salvo que diga
