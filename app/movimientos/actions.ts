@@ -247,6 +247,20 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         .maybeSingle();
       if (origen) return eliminarMovimiento(origen.id);
 
+      // Si arriba del ingreso solo hay descartes (la caída que se cargó),
+      // se borran primero esos descartes (y el stock de descarte que generaron).
+      const { data: encima } = await supabase
+        .from("movimientos_stock")
+        .select("id, tipo")
+        .eq("lote_id", movimiento.lote_id)
+        .neq("id", movimiento.id);
+      if ((encima ?? []).length && (encima ?? []).every((m: { tipo: string }) => m.tipo === "descarte")) {
+        for (const m of encima ?? []) {
+          const r = await eliminarMovimiento(m.id);
+          if (!r.ok) return r;
+        }
+      }
+
       const { count: otrosMovimientos } = await supabase
         .from("movimientos_stock")
         .select("id", { count: "exact", head: true })
