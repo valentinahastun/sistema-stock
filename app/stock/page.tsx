@@ -13,7 +13,7 @@ export default async function StockPage({
   const perfil = await getPerfilActual();
   const puedeEditar = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }] =
+  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }, { data: bolsas }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -26,7 +26,12 @@ export default async function StockPage({
         )
         .order("fecha_ingreso", { ascending: false }),
       supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
+      supabase.from("lotes").select("id, bolsas_25, bolsas_50, big_bags"),
     ]);
+
+  // Bolsas de cada lote (25 kg, 50 kg, big bags)
+  const bolsasPorLote = new Map<string, { bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null }>();
+  (bolsas ?? []).forEach((b: any) => bolsasPorLote.set(b.id, b));
 
   // Descarte real ya cargado en cada lote (para los lotes procesados)
   const descartePorLote = new Map<string, number>();
@@ -47,6 +52,9 @@ export default async function StockPage({
       stock_actual_tn: Number(l.stock_actual_tn),
       caida_pct_estimada: l.caida_pct_estimada === null ? null : Number(l.caida_pct_estimada),
       descarte_real_tn: descartePorLote.get(l.lote_id) ?? 0,
+      bolsas_25: bolsasPorLote.get(l.lote_id)?.bolsas_25 ?? null,
+      bolsas_50: bolsasPorLote.get(l.lote_id)?.bolsas_50 ?? null,
+      big_bags: bolsasPorLote.get(l.lote_id)?.big_bags ?? null,
     });
     lotesPorClave.set(clave, lista);
   });

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { confirmarCaidaEstimada } from "@/app/stock/actions";
+import { confirmarCaidaEstimada, guardarBolsas } from "@/app/stock/actions";
 
 export type LoteDetalle = {
   lote_id: string;
@@ -13,6 +13,9 @@ export type LoteDetalle = {
   stock_actual_tn: number;
   caida_pct_estimada: number | null;
   descarte_real_tn?: number; // descarte ya cargado en el lote
+  bolsas_25?: number | null; // bolsas de 25 kg
+  bolsas_50?: number | null; // bolsas de 50 kg
+  big_bags?: number | null;
 };
 
 export type FilaBase = {
@@ -238,6 +241,7 @@ function DetalleLotes({
           <th className="px-2 py-1">Productor</th>
           <th className="px-2 py-1">CP</th>
           <th className="px-2 py-1">Estado</th>
+          <th className="px-2 py-1">Bolsas</th>
           <th className="px-2 py-1 text-right">Stock actual (tn)</th>
           {!esDescarte && (
             <>
@@ -376,6 +380,9 @@ function FilaLote({
       <td className="px-2 py-1.5">{lote.productor}</td>
       <td className="px-2 py-1.5">{lote.numero_cp ?? "—"}</td>
       <td className="px-2 py-1.5 capitalize">{lote.estado}</td>
+      <td className="px-2 py-1.5">
+        {lote.estado === "natural" ? "—" : <CeldaBolsas lote={lote} puedeEditar={puedeEditar} />}
+      </td>
       <td className="px-2 py-1.5 text-right">{lote.stock_actual_tn.toFixed(2)}</td>
       {!esDescarte && (
         <>
@@ -444,5 +451,87 @@ function FilaLote({
         </>
       )}
     </tr>
+  );
+}
+
+// Bolsas de un lote procesado: de 25 kg, de 50 kg y big bags.
+function CeldaBolsas({ lote, puedeEditar }: { lote: LoteDetalle; puedeEditar: boolean }) {
+  const router = useRouter();
+  const [editando, setEditando] = useState(false);
+  const [valores, setValores] = useState({
+    bolsas_25: lote.bolsas_25 != null ? String(lote.bolsas_25) : "",
+    bolsas_50: lote.bolsas_50 != null ? String(lote.bolsas_50) : "",
+    big_bags: lote.big_bags != null ? String(lote.big_bags) : "",
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const partes = [
+    lote.bolsas_25 ? `${lote.bolsas_25.toLocaleString("es-AR")} × 25 kg` : null,
+    lote.bolsas_50 ? `${lote.bolsas_50.toLocaleString("es-AR")} × 50 kg` : null,
+    lote.big_bags ? `${lote.big_bags.toLocaleString("es-AR")} big bag${lote.big_bags === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+
+  async function guardar() {
+    const num = (s: string) => (s.trim() === "" ? null : Number(s));
+    const datos = { bolsas_25: num(valores.bolsas_25), bolsas_50: num(valores.bolsas_50), big_bags: num(valores.big_bags) };
+    setGuardando(true);
+    setError(null);
+    const r = await guardarBolsas(lote.lote_id, datos);
+    setGuardando(false);
+    if (r.ok) {
+      setEditando(false);
+      router.refresh();
+    } else setError(r.error);
+  }
+
+  if (!editando) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className={partes.length ? "" : "text-gray-400"}>{partes.length ? partes.join(" · ") : "Sin cargar"}</span>
+        {puedeEditar && (
+          <button type="button" onClick={() => setEditando(true)} className="text-brand-green hover:underline text-[11px]">
+            {partes.length ? "Editar" : "Cargar"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const campo = (k: keyof typeof valores, etiqueta: string) => (
+    <label className="flex items-center gap-1 whitespace-nowrap">
+      <input
+        type="number"
+        min="0"
+        step="1"
+        value={valores[k]}
+        onChange={(e) => setValores((v) => ({ ...v, [k]: e.target.value }))}
+        className="w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs"
+        placeholder="—"
+      />
+      <span className="text-gray-500">{etiqueta}</span>
+    </label>
+  );
+
+  return (
+    <div className="flex flex-col gap-1">
+      {campo("bolsas_25", "× 25 kg")}
+      {campo("bolsas_50", "× 50 kg")}
+      {campo("big_bags", "big bags")}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={guardando}
+          className="text-white bg-brand-green hover:bg-brand-green-dark rounded px-2 py-0.5 text-[11px] disabled:opacity-40"
+        >
+          {guardando ? "Guardando…" : "Guardar"}
+        </button>
+        <button type="button" onClick={() => setEditando(false)} className="text-gray-500 hover:underline text-[11px]">
+          Cancelar
+        </button>
+      </div>
+      {error && <span className="text-[10px] text-red-600">{error}</span>}
+    </div>
   );
 }
