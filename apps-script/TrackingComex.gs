@@ -800,8 +800,9 @@ function leerCarpetas() {
   const zona = 'America/Argentina/Buenos_Aires';
 
   Object.keys(porCv).forEach(cv => {
-    const reCv = new RegExp('(^|[^0-9])' + cv.replace('-', '\\s*-\\s*') + '(?![0-9])\\s*([A-Z](?:\\s*[-y,/]\\s*[A-Z])*)?(?![A-Za-z])', 'i');
-    const it = DriveApp.searchFolders('title contains "' + cv + '" and trashed = false');
+    // A veces la carpeta tiene un 0 de más: "CV 026-104"
+    const reCv = new RegExp('(^|[^0-9])0?' + cv.replace('-', '\\s*-\\s*') + '(?![0-9])\\s*([A-Z](?:\\s*[-y,/]\\s*[A-Z])*)?(?![A-Za-z])', 'i');
+    const it = DriveApp.searchFolders('(title contains "' + cv + '" or title contains "0' + cv + '") and trashed = false');
     const encontradas = [];
     while (it.hasNext()) {
       const f = it.next();
