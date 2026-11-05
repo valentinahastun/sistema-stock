@@ -4,6 +4,8 @@
 -- * Legucer: en observaciones va el N° de proceso y el CV.
 -- Si algo no coincide con los catálogos, no carga nada y avisa.
 
+drop table if exists _carga;
+
 begin;
 
 create temp table _carga (
