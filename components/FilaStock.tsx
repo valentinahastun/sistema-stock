@@ -210,7 +210,7 @@ function FilaProducto({
       {abierto && (
         <tr className="border-b last:border-0 bg-gray-50">
           <td colSpan={4} className="px-4 py-3">
-            <DetalleLotes lotes={lotes} puedeEditar={puedeEditar} />
+            <DetalleLotes lotes={lotes} puedeEditar={puedeEditar} esDescarte={/^descarte\b/i.test(fila.producto)} />
           </td>
         </tr>
       )}
@@ -221,9 +221,11 @@ function FilaProducto({
 function DetalleLotes({
   lotes,
   puedeEditar,
+  esDescarte,
 }: {
   lotes: LoteDetalle[];
   puedeEditar: boolean;
+  esDescarte: boolean; // los productos de descarte no llevan % de caída
 }) {
   if (lotes.length === 0) {
     return <p className="text-xs text-gray-400">Sin lotes cargados.</p>;
@@ -237,15 +239,19 @@ function DetalleLotes({
           <th className="px-2 py-1">CP</th>
           <th className="px-2 py-1">Estado</th>
           <th className="px-2 py-1 text-right">Stock actual (tn)</th>
-          <th className="px-2 py-1 text-right">% caída estim.</th>
-          <th className="px-2 py-1 text-right">Descarte estim. (tn)</th>
-          <th className="px-2 py-1 text-right">Exportable estim. (tn)</th>
-          <th className="px-2 py-1"></th>
+          {!esDescarte && (
+            <>
+              <th className="px-2 py-1 text-right">% caída estim.</th>
+              <th className="px-2 py-1 text-right">Descarte estim. (tn)</th>
+              <th className="px-2 py-1 text-right">Exportable estim. (tn)</th>
+              <th className="px-2 py-1"></th>
+            </>
+          )}
         </tr>
       </thead>
       <tbody>
         {lotes.map((l) => (
-          <FilaLote key={l.lote_id} lote={l} puedeEditar={puedeEditar} />
+          <FilaLote key={l.lote_id} lote={l} puedeEditar={puedeEditar} esDescarte={esDescarte} />
         ))}
       </tbody>
     </table>
@@ -261,9 +267,11 @@ function DetalleLotes({
 function FilaLote({
   lote,
   puedeEditar,
+  esDescarte,
 }: {
   lote: LoteDetalle;
   puedeEditar: boolean;
+  esDescarte: boolean;
 }) {
   const router = useRouter();
   const [modo, setModo] = useState<"pct" | "tn" | null>(
@@ -369,68 +377,72 @@ function FilaLote({
       <td className="px-2 py-1.5">{lote.numero_cp ?? "—"}</td>
       <td className="px-2 py-1.5 capitalize">{lote.estado}</td>
       <td className="px-2 py-1.5 text-right">{lote.stock_actual_tn.toFixed(2)}</td>
-      <td className="px-2 py-1.5 text-right">
-        {puedeCargar ? (
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="0.1"
-            value={pctMostrado}
-            onChange={(e) => onChangePct(e.target.value)}
-            className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
-              modo === "tn" && tnValido ? "text-gray-400" : ""
-            }`}
-            placeholder="—"
-          />
-        ) : esNatural ? (
-          lote.caida_pct_estimada !== null ? `${lote.caida_pct_estimada}%` : "—"
-        ) : pctReal !== null ? (
-          `${pctReal.toFixed(2)}%`
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="px-2 py-1.5 text-right">
-        {puedeCargar ? (
-          <input
-            type="number"
-            min="0"
-            max={lote.stock_actual_tn}
-            step="0.01"
-            value={tnMostrado}
-            onChange={(e) => onChangeTn(e.target.value)}
-            className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
-              modo === "pct" && pctValido ? "text-gray-400" : ""
-            }`}
-            placeholder="—"
-          />
-        ) : descarteEstimado !== null ? (
-          descarteEstimado.toFixed(2)
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="px-2 py-1.5 text-right">
-        {exportableEstimado !== null ? exportableEstimado.toFixed(2) : "—"}
-      </td>
-      <td className="px-2 py-1.5 text-right">
-        {puedeCargar && (
-          <div className="flex flex-col items-end gap-0.5">
-            <button
-              type="button"
-              onClick={confirmar}
-              disabled={confirmando || !valido}
-              className="text-white bg-brand-green hover:bg-brand-green-dark rounded px-2 py-0.5 text-[11px] disabled:opacity-40"
-            >
-              {confirmando ? "Cargando…" : "Confirmar"}
-            </button>
-            {error && (
-              <span className="text-[10px] text-red-600 max-w-[110px]">{error}</span>
+      {!esDescarte && (
+        <>
+          <td className="px-2 py-1.5 text-right">
+            {puedeCargar ? (
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={pctMostrado}
+                onChange={(e) => onChangePct(e.target.value)}
+                className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
+                  modo === "tn" && tnValido ? "text-gray-400" : ""
+                }`}
+                placeholder="—"
+              />
+            ) : esNatural ? (
+              lote.caida_pct_estimada !== null ? `${lote.caida_pct_estimada}%` : "—"
+            ) : pctReal !== null ? (
+              `${pctReal.toFixed(2)}%`
+            ) : (
+              "—"
             )}
-          </div>
-        )}
-      </td>
+          </td>
+          <td className="px-2 py-1.5 text-right">
+            {puedeCargar ? (
+              <input
+                type="number"
+                min="0"
+                max={lote.stock_actual_tn}
+                step="0.01"
+                value={tnMostrado}
+                onChange={(e) => onChangeTn(e.target.value)}
+                className={`w-16 border border-gray-300 rounded px-1 py-0.5 text-right text-xs ${
+                  modo === "pct" && pctValido ? "text-gray-400" : ""
+                }`}
+                placeholder="—"
+              />
+            ) : descarteEstimado !== null ? (
+              descarteEstimado.toFixed(2)
+            ) : (
+              "—"
+            )}
+          </td>
+          <td className="px-2 py-1.5 text-right">
+            {exportableEstimado !== null ? exportableEstimado.toFixed(2) : "—"}
+          </td>
+          <td className="px-2 py-1.5 text-right">
+            {puedeCargar && (
+              <div className="flex flex-col items-end gap-0.5">
+                <button
+                  type="button"
+                  onClick={confirmar}
+                  disabled={confirmando || !valido}
+                  className="text-white bg-brand-green hover:bg-brand-green-dark rounded px-2 py-0.5 text-[11px] disabled:opacity-40"
+                >
+                  {confirmando ? "Cargando…" : "Confirmar"}
+                </button>
+                {error && (
+                  <span className="text-[10px] text-red-600 max-w-[110px]">{error}</span>
+                )}
+              </div>
+            )}
+          </td>
+        </>
+      )}
     </tr>
   );
 }
