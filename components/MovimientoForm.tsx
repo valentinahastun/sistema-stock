@@ -385,6 +385,73 @@ export default function MovimientoForm({
     setParaAgregar(null);
   }
 
+  // Alta a mano de un productor o una planta que no está en la lista
+  // (por ejemplo cuando la CP no se pudo leer).
+  const [nuevoNombre, setNuevoNombre] = useState<{ tabla: "plantas" | "productores"; nombre: string } | null>(null);
+  async function agregarManual() {
+    if (!nuevoNombre || !nuevoNombre.nombre.trim()) return;
+    setAgregando(true);
+    const r = await crearDesdeCp(nuevoNombre.tabla, nuevoNombre.nombre.trim());
+    setAgregando(false);
+    if (!r.ok) {
+      setMensajeCp({ tipo: "error", texto: r.error });
+      return;
+    }
+    const nuevo = { id: r.id, nombre: r.nombre };
+    const orden = (l: Catalogo[]) =>
+      l.some((x) => x.id === nuevo.id) ? l : [...l, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    if (nuevoNombre.tabla === "productores") {
+      setListaProductores(orden);
+      setProductorId(nuevo.id);
+    } else {
+      setListaPlantas(orden);
+      setPlantaId(nuevo.id);
+    }
+    setNuevoNombre(null);
+  }
+  function AgregarManual({ tabla }: { tabla: "plantas" | "productores" }) {
+    const etiqueta = tabla === "plantas" ? "planta" : "productor";
+    if (!nuevoNombre || nuevoNombre.tabla !== tabla) {
+      return (
+        <button
+          type="button"
+          onClick={() => setNuevoNombre({ tabla, nombre: "" })}
+          className="mt-1 text-xs text-brand-green hover:underline"
+        >
+          + ¿No está en la lista? Agregar {etiqueta}
+        </button>
+      );
+    }
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <input
+          autoFocus
+          value={nuevoNombre.nombre}
+          onChange={(e) => setNuevoNombre({ tabla, nombre: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              agregarManual();
+            }
+          }}
+          placeholder={`Nombre del ${etiqueta}`}
+          className="border border-gray-300 rounded px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          disabled={agregando || !nuevoNombre.nombre.trim()}
+          onClick={agregarManual}
+          className="rounded bg-brand-navy text-white px-2 py-1 disabled:opacity-50"
+        >
+          {agregando ? "Agregando…" : "Agregar"}
+        </button>
+        <button type="button" onClick={() => setNuevoNombre(null)} className="text-gray-500 hover:underline">
+          Cancelar
+        </button>
+      </div>
+    );
+  }
+
   function AvisoAgregar({ tabla }: { tabla: "plantas" | "productores" }) {
     if (!paraAgregar || paraAgregar.tabla !== tabla) return null;
     return (
@@ -527,6 +594,7 @@ export default function MovimientoForm({
                 ))}
               </select>
               <AvisoAgregar tabla="productores" />
+              {AgregarManual({ tabla: "productores" })}
             </Campo>
 
             <Campo label="Estado">
@@ -614,6 +682,7 @@ export default function MovimientoForm({
                 ))}
               </select>
               <AvisoAgregar tabla="plantas" />
+              {AgregarManual({ tabla: "plantas" })}
             </Campo>
 
             <Campo label="Producto">
