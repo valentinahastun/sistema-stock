@@ -438,3 +438,22 @@ function normalizarCv(texto: string): string | null {
   const anio = m[1] ?? "26";
   return `CV ${anio}-${m[2].padStart(3, "0")}${m[3] ? " " + m[3] : ""}`;
 }
+
+// Cambia (o saca) el CV de una salida ya cargada.
+export async function cambiarCvEgreso(movimientoId: string, cvTexto: string): Promise<Resultado> {
+  try {
+    await verificarAdmin();
+    const texto = cvTexto.trim();
+    const cv = texto ? normalizarCv(texto) : null;
+    if (texto && !cv) return { ok: false, error: `No entendí el CV "${texto}". Escribilo como 26-124 o 26-115 A.` };
+    const supabase = createClient();
+    const { error } = await supabase.from("movimientos_stock").update({ cv }).eq("id", movimientoId).eq("tipo", "egreso");
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/egresos");
+    revalidatePath("/stock");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
+import CeldaCvEgreso from "@/components/CeldaCvEgreso";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -25,7 +26,7 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, cantidad, fecha, motivo, observaciones, cv, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
       .order("fecha", { ascending: false })
@@ -38,6 +39,7 @@ export default async function EgresosPage({
     fecha: string;
     motivo: string | null;
     observaciones: string | null;
+    cv: string | null;
     numero_cp: string | null;
     transportista: string | null;
     chofer: string | null;
@@ -118,6 +120,7 @@ export default async function EgresosPage({
               <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2">CP / Transporte</th>
               <th className="px-4 py-2">Destino</th>
+              <th className="px-4 py-2">CV</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Motivo</th>
               <th className="px-4 py-2">Observaciones</th>
@@ -143,6 +146,9 @@ export default async function EgresosPage({
                     {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && "—"}
                   </td>
                   <td className="px-4 py-2 text-gray-600">{f.destino ?? "—"}</td>
+                  <td className="px-4 py-2">
+                    <CeldaCvEgreso movimientoId={f.id} cv={f.cv} puedeEditar={esAdmin} />
+                  </td>
                   <td className="px-4 py-2 text-right font-medium">
                     {Number(f.cantidad).toFixed(2)}
                   </td>
@@ -158,7 +164,7 @@ export default async function EgresosPage({
             })}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 10 : 9} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 11 : 10} className="px-4 py-6 text-center text-gray-400">
                   No hay egresos cargados todavía para este filtro.
                 </td>
               </tr>

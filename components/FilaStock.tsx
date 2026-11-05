@@ -18,6 +18,7 @@ export type LoteDetalle = {
   big_bags?: number | null;
   cv?: string | null; // CV al que está comprometido el lote
   salidas_tn?: number; // egresos (por planta/producto) que se descuentan de este lote
+  salidas?: { cv: string | null; tn: number }[]; // a qué CV salió y cuánto
 };
 
 export type FilaBase = {
@@ -395,8 +396,14 @@ function FilaLote({
       </td>
       <td className="px-2 py-1.5 text-right">
         {lote.stock_actual_tn.toFixed(2)}
-        {lote.salidas_tn ? (
-          <div className="text-[10px] text-gray-400">salieron {lote.salidas_tn.toFixed(2)}</div>
+        {lote.salidas?.length ? (
+          <div className="text-[10px] text-gray-400 whitespace-nowrap">
+            {lote.salidas.map((s, i) => (
+              <div key={i}>
+                salieron {s.tn.toFixed(2)} {s.cv ? `a ${s.cv}` : "sin CV"}
+              </div>
+            ))}
+          </div>
         ) : null}
       </td>
       {!esDescarte && (
