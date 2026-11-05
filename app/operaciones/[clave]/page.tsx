@@ -181,7 +181,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                         <>
                           {" · "}
                           <a href={h.mail_url} target="_blank" rel="noreferrer" className="underline">
-                            {h.fuente === "drive" ? "ver archivo" : "ver mail"}
+                            {h.fuente === "drive" ? (/^\d+ CP:/.test(h.detalle ?? "") && !/^1 CP:/.test(h.detalle ?? "") ? "ver carpeta" : "ver archivo") : "ver mail"}
                           </a>
                         </>
                       )}

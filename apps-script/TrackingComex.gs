@@ -874,7 +874,26 @@ function leerCarpetas() {
     });
   });
 
-  const r = rpc('op_drive', { p_token: prop('TOKEN_SYNC'), p_items: items, p_carpetas: carpetas });
+  // Camiones: una sola entrada por operación con todas las CP de la carpeta
+  const cps = {};
+  const envio = items.filter(i => {
+    if (i.paso !== 'camiones') return true;
+    const c = cps[i.clave] || (cps[i.clave] = { fecha: i.fecha, url: i.url, nombres: [] });
+    if (i.fecha < c.fecha) c.fecha = i.fecha;
+    const n = i.detalle.replace(/\.pdf$/i, '');
+    if (c.nombres.indexOf(n) < 0) c.nombres.push(n);
+    return false;
+  });
+  Object.keys(cps).forEach(k => {
+    const c = cps[k];
+    c.nombres.sort();
+    const carpeta = carpetas.filter(x => x.clave === k)[0];
+    envio.push({ clave: k, paso: 'camiones', fecha: c.fecha,
+      url: c.nombres.length > 1 && carpeta ? carpeta.url : c.url,
+      detalle: c.nombres.length + ' CP: ' + c.nombres.join(', ') });
+  });
+
+  const r = rpc('op_drive', { p_token: prop('TOKEN_SYNC'), p_items: envio, p_carpetas: carpetas });
   Logger.log('Carpetas encontradas: %s de %s operaciones · documentos vistos: %s · pasos marcados: %s',
     carpetas.length, ops.length, items.length, r.hitos);
   return r;
