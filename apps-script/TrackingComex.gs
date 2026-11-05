@@ -73,7 +73,55 @@ function sincronizar() {
     datos.ops.length, r.nuevas, r.hitos, r.cerradas);
   // Después de las planillas, el mail (si falla, la sincronización igual quedó hecha)
   try { leerMails(); } catch (e) { Logger.log('No se pudo leer el mail: ' + e.message); }
+  // Compras de la solapa COMPRAS -> stock
+  try { sincronizarCompras(); } catch (e) { Logger.log('No se pudieron pasar las compras al stock: ' + e.message); }
   return r;
+}
+
+// ============================================================
+// COMPRAS -> STOCK
+// ============================================================
+// Cada compra de Seguimiento COMEX > COMPRAS entra al stock una sola vez
+// (stock_compras() en la base decide si es nueva, si cambió el CV o las tn,
+// o si su CV ya cargó). Una celda de CV puede repartir la compra:
+// "48 TN 26-128 / 192 tn 26-134".
+function sincronizarCompras() {
+  const filas = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName('COMPRAS').getDataRange().getValues().slice(1);
+  const items = armarCompras(filas);
+  const r = rpc('stock_compras', { p_token: prop('TOKEN_SYNC'), p_items: items });
+  Logger.log('Compras al stock: %s filas · nuevas: %s · actualizadas: %s · salteadas: %s%s',
+    items.length, r.nuevas, r.actualizadas, r.salteadas, r.primera_vez ? ' (primera vez: solo se registraron)' : '');
+  return r;
+}
+
+function armarCompras(filas) {
+  const vistos = {};
+  const items = [];
+  filas.forEach(f => {
+    const producto = txt(f[4]).trim();
+    const s = String(f[7] || '').trim();
+    const tn = typeof f[7] === 'number' ? f[7] : Number(s.indexOf(',') >= 0 ? s.replace(/\./g, '').replace(',', '.') : s);
+    if (!producto || !(tn > 0)) return;
+    const fecha = esFecha(f[0]) ? iso(f[0]) : fechaCelda(f[0]);
+    // Clave estable: fecha + producto + orden entre las compras de ese día y producto
+    const base = (fecha || 'sin-fecha') + '|' + sinAcentos(producto).toLowerCase();
+    vistos[base] = (vistos[base] || 0) + 1;
+    const clave = base + '|' + vistos[base];
+    const textoCv = txt(f[1]);
+    const partes = [];
+    const re = /(\d+(?:[.,]\d+)?)\s*tn\s*(?:cv\s*)?(\d{2})\s*-\s*(\d{3})(?:\s*([A-Z])(?![A-Za-z]))?/gi;
+    let m;
+    while ((m = re.exec(textoCv))) partes.push({ tn: Number(m[1].replace(',', '.')), cv: 'CV ' + m[2] + '-' + m[3] + (m[4] ? ' ' + m[4].toUpperCase() : '') });
+    if (!partes.length) {
+      const u = textoCv.match(/(\d{2})\s*-\s*(\d{3})(?:\s*([A-Z])(?![A-Za-z]))?/i);
+      partes.push({ tn, cv: u ? 'CV ' + u[1] + '-' + u[2] + (u[3] ? ' ' + u[3].toUpperCase() : '') : null });
+    }
+    partes.forEach((p, i) => items.push({
+      clave: clave + '|' + (i + 1), fecha, productor: txt(f[2]).trim(), producto,
+      estado: txt(f[6]).trim().toLowerCase(), tn: p.tn, cv: p.cv,
+    }));
+  });
+  return items;
 }
 
 function leerTodo() {
@@ -984,4 +1032,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarCompras, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
