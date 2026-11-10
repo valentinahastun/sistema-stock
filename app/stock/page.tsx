@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import StockAgrupado, { type LoteDetalle, type FilaBase } from "@/components/FilaStock";
+import { repartirEgresos } from "@/lib/repartoEgresos";
 
 export default async function StockPage({
   searchParams,
@@ -27,7 +28,7 @@ export default async function StockPage({
         .order("fecha_ingreso", { ascending: false }),
       supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
       supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags, tipo_descarte, proceso_id, procesos!lotes_proceso_id_fkey(numero)"),
-      supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv").eq("tipo", "egreso").is("lote_id", null),
+      supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv, productores(nombre)").eq("tipo", "egreso").is("lote_id", null),
       // Lo que entró de cada lote a un proceso
       supabase.from("proceso_entradas").select("lote_id, cantidad, procesos(numero)"),
       supabase
@@ -84,46 +85,17 @@ export default async function StockPage({
     lotesPorClave.set(clave, lista);
   });
 
-  // Las salidas (egresos) se cargan por planta + producto, no sobre un lote.
-  // Para que el detalle muestre lo que queda en cada lote, se reparten entre
-  // los lotes procesados: las que tienen CV, en los lotes de ese CV; las demás,
-  // primero en los lotes libres y después en el resto, del más viejo al más nuevo.
-  const egresosPorClave = new Map<string, { cantidad: number; cv: string | null }[]>();
-  (egresos ?? []).forEach((e: any) => {
-    const clave = `${e.planta_id}-${e.producto_id}`;
-    const lista = egresosPorClave.get(clave) ?? [];
-    lista.push({ cantidad: Number(e.cantidad), cv: e.cv ?? null });
-    egresosPorClave.set(clave, lista);
-  });
-  egresosPorClave.forEach((lista, clave) => {
-    const procesados = (lotesPorClave.get(clave) ?? [])
-      .filter((l) => l.estado !== "natural")
-      .sort((a, b) => (a.fecha_ingreso < b.fecha_ingreso ? -1 : 1));
-    const descontar = (cantidad: number, cv: string | null, candidatos: LoteDetalle[]) => {
-      let resto = cantidad;
-      for (const l of candidatos) {
-        if (resto <= 0) break;
-        const sale = Math.min(resto, Math.max(l.stock_actual_tn, 0));
-        if (sale <= 0) continue;
-        l.stock_actual_tn -= sale;
-        l.salidas_tn = (l.salidas_tn ?? 0) + sale;
-        const salidas = (l.salidas = l.salidas ?? []);
-        const ya = salidas.find((s) => s.cv === cv);
-        if (ya) ya.tn += sale;
-        else salidas.push({ cv, tn: sale });
-        resto -= sale;
-      }
-      return resto;
-    };
-    lista.filter((e) => e.cv).forEach((e) => {
-      const resto = descontar(e.cantidad, e.cv, procesados.filter((l) => l.cv === e.cv));
-      if (resto > 0) descontar(resto, e.cv, procesados);
-    });
-    lista.filter((e) => !e.cv).forEach((e) => {
-      const resto = descontar(e.cantidad, null, procesados.filter((l) => !l.cv));
-      if (resto > 0) descontar(resto, null, procesados);
-    });
-  });
+  // Salidas (egresos) repartidas entre los lotes: ver lib/repartoEgresos.ts
+  repartirEgresos(
+    lotesPorClave,
+    (egresos ?? []).map((e: any) => ({
+      planta_id: e.planta_id,
+      producto_id: e.producto_id,
+      cantidad: Number(e.cantidad),
+      cv: e.cv ?? null,
+      productor: (Array.isArray(e.productores) ? e.productores[0]?.nombre : e.productores?.nombre) ?? null,
+    }))
+  );
 
   const comprometidoPorClave = new Map<string, number>();
   (comprometido ?? []).forEach((c) => {

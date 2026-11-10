@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { crearIngreso, crearMovimientoDirecto, crearEgreso } from "@/app/movimientos/actions";
+import { crearIngreso, crearMovimientoDirecto, crearEgreso, buscarCpCargada, type CpCargada } from "@/app/movimientos/actions";
 import { crearDesdeCp } from "@/app/catalogos/actions";
+import { normalizarCv } from "@/lib/cv";
 
 type Catalogo = { id: string; nombre: string };
 
@@ -105,7 +106,24 @@ function buscarEnCatalogo(nombre: string | null | undefined, catalogo: Catalogo[
   );
 }
 
-export type LoteConProductor = { planta_id: string; producto_id: string; productor_id: string | null; tn: number };
+export type LoteConProductor = {
+  planta_id: string;
+  producto_id: string;
+  productor_id: string | null;
+  cv?: string | null;
+  tn: number;
+};
+type Nota = { tipo: "ok" | "aviso"; texto: string };
+type Pista = { nombre: string | null; de: string };
+type Contexto = {
+  plantaId: string;
+  productoId: string;
+  cv: string | null;
+  lotes: LoteConProductor[];
+  productores: Catalogo[];
+  plantas: Catalogo[];
+  productos: Catalogo[];
+};
 
 function fmtTn(n: number) {
   return n.toLocaleString("es-AR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -117,57 +135,115 @@ function stockDe(lotes: LoteConProductor[], plantaId: string, productoId: string
     .reduce((s, l) => s + l.tn, 0);
 }
 
-function sugerirProductor({
-  plantaId,
-  productoId,
-  pistas,
-  lotes,
-  productores,
-}: {
-  plantaId: string;
-  productoId: string;
-  pistas: { nombre: string | null; de: string }[];
-  lotes: LoteConProductor[];
-  productores: Catalogo[];
-}): { id: string; nota: { tipo: "ok" | "aviso"; texto: string } | null } {
-  // Productores con stock en la planta (y del producto, si ya está elegido)
-  const porProductor = new Map<string, number>();
-  lotes
-    .filter((l) => l.planta_id === plantaId && (!productoId || l.producto_id === productoId) && l.productor_id)
-    .forEach((l) => porProductor.set(l.productor_id!, (porProductor.get(l.productor_id!) ?? 0) + l.tn));
-  const conStock = productores
-    .filter((p) => (porProductor.get(p.id) ?? 0) > 0.0005)
-    .map((p) => ({ ...p, tn: porProductor.get(p.id)! }))
+// Productores (con sus tn) de un grupo de lotes, del que más tiene al que menos
+function productoresDe(lotes: LoteConProductor[], productores: Catalogo[]) {
+  const tn = new Map<string, number>();
+  lotes.forEach((l) => l.productor_id && tn.set(l.productor_id, (tn.get(l.productor_id) ?? 0) + l.tn));
+  return productores
+    .filter((p) => (tn.get(p.id) ?? 0) > 0.0005)
+    .map((p) => ({ ...p, tn: tn.get(p.id)! }))
     .sort((a, b) => b.tn - a.tn);
-  const que = productoId ? "de este producto " : "";
+}
 
-  for (const pista of pistas) {
-    const p = buscarEnCatalogo(pista.nombre, conStock);
-    if (p) {
-      const tn = porProductor.get(p.id) ?? 0;
+function listar(ps: { nombre: string; tn: number }[]) {
+  return ps.slice(0, 6).map((p) => `${p.nombre} (${fmtTn(p.tn)} tn)`).join(", ") + (ps.length > 6 ? "…" : "");
+}
+
+function deAca(c: Contexto) {
+  return c.lotes.filter((l) => l.planta_id === c.plantaId && (!c.productoId || l.producto_id === c.productoId));
+}
+
+// Aviso si el CV no tiene mercadería en esta planta/producto (y dónde está, si está en otro lado)
+function avisoCvAusente(c: Contexto): Nota {
+  const lugares = new Map<string, number>();
+  c.lotes
+    .filter((l) => l.cv === c.cv)
+    .forEach((l) => {
+      const lugar = `${c.plantas.find((p) => p.id === l.planta_id)?.nombre ?? "?"} / ${c.productos.find((p) => p.id === l.producto_id)?.nombre ?? "?"}`;
+      lugares.set(lugar, (lugares.get(lugar) ?? 0) + l.tn);
+    });
+  const donde = Array.from(lugares.entries()).map(([l, tn]) => `${l} (${fmtTn(tn)} tn)`).join(", ");
+  return {
+    tipo: "aviso",
+    texto: donde
+      ? `El ${c.cv} no tiene mercadería en esta planta/producto. Está en: ${donde}. Revisá el CV o la planta.`
+      : `El ${c.cv} no tiene mercadería asignada en el stock. Revisá el número.`,
+  };
+}
+
+// Sugerencia de productor para un egreso. Orden: el CV (dueño de la
+// mercadería de ese CV en la planta), el nombre de la planta o del titular
+// de la CP, el único productor con stock ahí. Si no se puede, se lista.
+function sugerirProductor(c: Contexto & { pistas: Pista[] }): { id: string; notas: Nota[] } {
+  const aca = deAca(c);
+  const que = c.productoId ? "de este producto " : "";
+  const notas: Nota[] = [];
+
+  if (c.cv) {
+    const duenos = productoresDe(aca.filter((l) => l.cv === c.cv), c.productores);
+    if (duenos.length === 1) {
       return {
-        id: p.id,
-        nota: { tipo: "ok", texto: `Elegido solo: ${p.nombre} coincide con ${pista.de} y tiene ${fmtTn(tn)} tn ${que}acá.` },
+        id: duenos[0].id,
+        notas: [{ tipo: "ok", texto: `Elegido solo: la mercadería del ${c.cv} en esta planta es de ${duenos[0].nombre} (${fmtTn(duenos[0].tn)} tn).` }],
       };
+    }
+    if (duenos.length > 1) {
+      for (const pista of c.pistas) {
+        const p = buscarEnCatalogo(pista.nombre, duenos) as (Catalogo & { tn: number }) | null;
+        if (p) {
+          return {
+            id: p.id,
+            notas: [{ tipo: "ok", texto: `Elegido solo: ${p.nombre} coincide con ${pista.de} y tiene ${fmtTn(p.tn)} tn del ${c.cv}.` }],
+          };
+        }
+      }
+      return { id: "", notas: [{ tipo: "aviso", texto: `El ${c.cv} tiene mercadería de varios productores: ${listar(duenos)}. Elegí de quién sale.` }] };
+    }
+    notas.push(avisoCvAusente(c));
+  }
+
+  const conStock = productoresDe(aca, c.productores);
+  for (const pista of c.pistas) {
+    const p = buscarEnCatalogo(pista.nombre, conStock) as (Catalogo & { tn: number }) | null;
+    if (p) {
+      notas.push({ tipo: "ok", texto: `Elegido solo: ${p.nombre} coincide con ${pista.de} y tiene ${fmtTn(p.tn)} tn ${que}acá.` });
+      return { id: p.id, notas };
     }
   }
   if (conStock.length === 1) {
-    return {
-      id: conStock[0].id,
-      nota: { tipo: "ok", texto: `Elegido solo: ${conStock[0].nombre} es el único con stock ${que}en esta planta (${fmtTn(conStock[0].tn)} tn).` },
-    };
+    notas.push({ tipo: "ok", texto: `Elegido solo: ${conStock[0].nombre} es el único con stock ${que}en esta planta (${fmtTn(conStock[0].tn)} tn).` });
+    return { id: conStock[0].id, notas };
   }
-  if (conStock.length === 0) {
-    return { id: "", nota: { tipo: "aviso", texto: `No hay stock ${que}cargado a nombre de ningún productor en esta planta.` } };
+  notas.push(
+    conStock.length === 0
+      ? { tipo: "aviso", texto: `No hay stock ${que}cargado a nombre de ningún productor en esta planta.` }
+      : { tipo: "aviso", texto: `Hay stock ${que}de varios productores: ${listar(conStock)}. Elegí de quién sale.` }
+  );
+  return { id: "", notas };
+}
+
+// Revisión del productor elegido a mano: cuánto tiene y si coincide con el CV
+function revisarElegido(c: Contexto & { productorId: string }): Nota[] {
+  const elegido = c.productores.find((p) => p.id === c.productorId);
+  if (!elegido) return c.cv && !deAca(c).some((l) => l.cv === c.cv) ? [avisoCvAusente(c)] : [];
+  const notas: Nota[] = [];
+  if (c.cv) {
+    const duenos = productoresDe(deAca(c).filter((l) => l.cv === c.cv), c.productores);
+    if (duenos.length === 0) notas.push(avisoCvAusente(c));
+    else if (!duenos.some((d) => d.id === elegido.id)) {
+      notas.push({
+        tipo: "aviso",
+        texto: `El ${c.cv} es de ${duenos.map((d) => d.nombre).join(" y ")} y elegiste ${elegido.nombre}. Revisalo.`,
+      });
+    }
   }
-  const lista = conStock
-    .slice(0, 6)
-    .map((p) => `${p.nombre} (${fmtTn(p.tn)} tn)`)
-    .join(", ");
-  return {
-    id: "",
-    nota: { tipo: "aviso", texto: `Hay stock ${que}de varios productores: ${lista}${conStock.length > 6 ? "…" : ""}. Elegí de quién sale.` },
-  };
+  const tn = stockDe(c.lotes, c.plantaId, c.productoId, elegido.id);
+  notas.push(
+    tn > 0.0005
+      ? { tipo: "ok", texto: `${elegido.nombre} tiene ${fmtTn(tn)} tn ${c.productoId ? "de este producto " : ""}en esta planta.` }
+      : { tipo: "aviso", texto: `${elegido.nombre} no tiene stock ${c.productoId ? "de este producto " : ""}en esta planta. Revisalo.` }
+  );
+  return notas;
 }
 
 export default function MovimientoForm({
@@ -209,7 +285,12 @@ export default function MovimientoForm({
   const [plantaId, setPlantaId] = useState("");
   const [productorId, setProductorId] = useState("");
   // Egreso: por qué se eligió (o no) el productor solo, y si la persona lo cambió a mano
-  const [notaProductor, setNotaProductor] = useState<{ tipo: "ok" | "aviso"; texto: string } | null>(null);
+  const [notasProductor, setNotasProductor] = useState<Nota[]>([]);
+  // CV del egreso: se revisa al salir del campo (no mientras se escribe)
+  const [cvTexto, setCvTexto] = useState("");
+  const [cvEgreso, setCvEgreso] = useState<string | null>(null);
+  // CP que ya está cargada como el mismo tipo de movimiento
+  const [cpRepetida, setCpRepetida] = useState<CpCargada[]>([]);
   const productorAMano = useRef(false);
   // Catálogos locales: si desde la CP se agrega una planta o un productor
   // nuevo, aparece en la lista sin recargar la página.
@@ -244,7 +325,7 @@ export default function MovimientoForm({
     setPlantaId("");
     setProductorId("");
     productorAMano.current = false;
-    setNotaProductor(null);
+    setNotasProductor([]);
     setParaAgregar(null);
     setDatosCp(null);
     setMensajeCp(null);
@@ -405,31 +486,54 @@ export default function MovimientoForm({
   // CAÑADA HUMEDA), se elige ese; si hay un solo productor con stock de ese
   // producto en la planta, ese. Si hay varios, se avisa cuáles y se elige a mano.
   useEffect(() => {
-    if (tipo !== "egreso") {
-      setNotaProductor(null);
+    if (tipo !== "egreso" || !plantaId) {
+      setNotasProductor([]);
       return;
     }
-    if (productorAMano.current) return;
-    if (!plantaId) {
-      setNotaProductor(null);
+    const contexto: Contexto = {
+      plantaId,
+      productoId,
+      cv: cvEgreso,
+      lotes: lotesStock,
+      productores: listaProductores,
+      plantas: listaPlantas,
+      productos,
+    };
+    if (productorAMano.current) {
+      setNotasProductor(revisarElegido({ ...contexto, productorId }));
       return;
     }
     const nombrePlanta = listaPlantas.find((p) => p.id === plantaId)?.nombre ?? null;
     const r = sugerirProductor({
-      plantaId,
-      productoId,
+      ...contexto,
       pistas: [
         { nombre: nombrePlanta, de: "la planta" },
         { nombre: conAlias(datosCp?.titular), de: "el titular de la CP" },
         { nombre: datosCp?.productor ?? null, de: "el remitente productor de la CP" },
       ],
-      lotes: lotesStock,
-      productores: listaProductores,
     });
     setProductorId(r.id);
-    setNotaProductor(r.nota);
+    setNotasProductor(r.notas);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipo, plantaId, productoId, datosCp]);
+  }, [tipo, plantaId, productoId, datosCp, cvEgreso]);
+
+  useEffect(() => {
+    setCpRepetida([]);
+    if (numeroCp.replace(/\D/g, "").length < 6) return;
+    let vigente = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await buscarCpCargada(numeroCp, tipo as "ingreso" | "egreso" | "directo");
+        if (vigente) setCpRepetida(r);
+      } catch {
+        // sin conexión: no se avisa, no bloquea la carga
+      }
+    }, 400);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+    };
+  }, [numeroCp, tipo]);
 
   async function handleLeerCp(archivo: File, tipoActual: Tipo) {
     setLeyendoCp(true);
@@ -593,6 +697,8 @@ export default function MovimientoForm({
       setMensaje({ tipo: "ok", texto: "Movimiento cargado correctamente." });
       (document.getElementById("form-movimiento") as HTMLFormElement)?.reset();
       limpiarCamposCp();
+      setCvTexto("");
+      setCvEgreso(null);
     } else {
       setMensaje({ tipo: "error", texto: resultado.error });
     }
@@ -715,6 +821,28 @@ export default function MovimientoForm({
                 value={numeroCp}
                 onChange={(e) => setNumeroCp(e.target.value)}
               />
+              {cpRepetida.length > 0 && (
+                <div className="text-xs mt-1 rounded border border-amber-200 bg-amber-50 text-amber-800 px-2 py-1.5">
+                  Esta CP ya está cargada:{" "}
+                  {cpRepetida
+                    .map(
+                      (c) =>
+                        [
+                          c.fecha ? c.fecha.split("-").reverse().join("/") : null,
+                          listaPlantas.find((p) => p.id === c.planta_id)?.nombre,
+                          productos.find((p) => p.id === c.producto_id)?.nombre,
+                          c.tn ? `${fmtTn(c.tn)} tn` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")
+                    )
+                    .join(" · ")}
+                  .
+                  <label className="flex items-center gap-1.5 mt-1 font-medium">
+                    <input type="checkbox" required /> Es otra carga, guardar igual
+                  </label>
+                </div>
+              )}
             </Campo>
 
             <Campo label="Transportista">
@@ -807,7 +935,14 @@ export default function MovimientoForm({
             </Campo>
 
             <Campo label="CV (si la salida es para una operación; baja lo comprometido)">
-              <input name="cv" className="input" placeholder="Ej.: 26-124" />
+              <input
+                name="cv"
+                className="input"
+                placeholder="Ej.: 26-124"
+                value={cvTexto}
+                onChange={(e) => setCvTexto(e.target.value)}
+                onBlur={() => setCvEgreso(normalizarCv(cvTexto))}
+              />
             </Campo>
 
             <Campo label="Productor (sale del stock de la planta)">
@@ -818,14 +953,17 @@ export default function MovimientoForm({
                 onChange={(e) => {
                   productorAMano.current = true;
                   setProductorId(e.target.value);
-                  const elegido = listaProductores.find((p) => p.id === e.target.value);
-                  const tnElegido = elegido ? stockDe(lotesStock, plantaId, productoId, elegido.id) : 0;
-                  setNotaProductor(
-                    !elegido
-                      ? null
-                      : tnElegido > 0.0005
-                      ? { tipo: "ok", texto: `${elegido.nombre} tiene ${fmtTn(tnElegido)} tn de este producto en esta planta.` }
-                      : { tipo: "aviso", texto: `${elegido.nombre} no tiene stock de este producto en esta planta. Revisalo.` }
+                  setNotasProductor(
+                    revisarElegido({
+                      plantaId,
+                      productoId,
+                      cv: cvEgreso,
+                      lotes: lotesStock,
+                      productores: listaProductores,
+                      plantas: listaPlantas,
+                      productos,
+                      productorId: e.target.value,
+                    })
                   );
                 }}
               >
@@ -836,11 +974,11 @@ export default function MovimientoForm({
                   </option>
                 ))}
               </select>
-              {notaProductor && (
-                <p className={`text-xs mt-1 ${notaProductor.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>
-                  {notaProductor.texto}
+              {notasProductor.map((n, i) => (
+                <p key={i} className={`text-xs mt-1 ${n.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>
+                  {n.texto}
                 </p>
-              )}
+              ))}
             </Campo>
 
             <Campo label="Número de CP">
@@ -850,6 +988,28 @@ export default function MovimientoForm({
                 value={numeroCp}
                 onChange={(e) => setNumeroCp(e.target.value)}
               />
+              {cpRepetida.length > 0 && (
+                <div className="text-xs mt-1 rounded border border-amber-200 bg-amber-50 text-amber-800 px-2 py-1.5">
+                  Esta CP ya está cargada:{" "}
+                  {cpRepetida
+                    .map(
+                      (c) =>
+                        [
+                          c.fecha ? c.fecha.split("-").reverse().join("/") : null,
+                          listaPlantas.find((p) => p.id === c.planta_id)?.nombre,
+                          productos.find((p) => p.id === c.producto_id)?.nombre,
+                          c.tn ? `${fmtTn(c.tn)} tn` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")
+                    )
+                    .join(" · ")}
+                  .
+                  <label className="flex items-center gap-1.5 mt-1 font-medium">
+                    <input type="checkbox" required /> Es otra carga, guardar igual
+                  </label>
+                </div>
+              )}
             </Campo>
 
             <Campo label="Transportista">
@@ -971,6 +1131,28 @@ export default function MovimientoForm({
                 value={numeroCp}
                 onChange={(e) => setNumeroCp(e.target.value)}
               />
+              {cpRepetida.length > 0 && (
+                <div className="text-xs mt-1 rounded border border-amber-200 bg-amber-50 text-amber-800 px-2 py-1.5">
+                  Esta CP ya está cargada:{" "}
+                  {cpRepetida
+                    .map(
+                      (c) =>
+                        [
+                          c.fecha ? c.fecha.split("-").reverse().join("/") : null,
+                          listaPlantas.find((p) => p.id === c.planta_id)?.nombre,
+                          productos.find((p) => p.id === c.producto_id)?.nombre,
+                          c.tn ? `${fmtTn(c.tn)} tn` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")
+                    )
+                    .join(" · ")}
+                  .
+                  <label className="flex items-center gap-1.5 mt-1 font-medium">
+                    <input type="checkbox" required /> Es otra carga, guardar igual
+                  </label>
+                </div>
+              )}
             </Campo>
 
             <Campo label="Transportista">

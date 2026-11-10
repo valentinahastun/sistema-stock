@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
+import { repartirEgresos } from "@/lib/repartoEgresos";
 import MovimientoForm from "@/components/MovimientoForm";
 import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
 
@@ -29,6 +30,8 @@ export default async function MovimientosPage() {
     { data: descartes },
     { data: stock },
     { data: stockLotes },
+    { data: lotesCv },
+    { data: egresos },
   ] = await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -42,17 +45,56 @@ export default async function MovimientosPage() {
         .order("fecha", { ascending: false })
         .limit(100),
       supabase.from("stock_consolidado").select("planta_id, producto_id, stock_disponible_tn"),
-      supabase.from("stock_lotes").select("planta_id, producto_id, productor, stock_actual_tn").gt("stock_actual_tn", 0.0005),
+      supabase.from("stock_lotes").select("lote_id, planta_id, producto_id, productor, estado, fecha_ingreso, stock_actual_tn").gt("stock_actual_tn", 0.0005),
+      supabase.from("lotes").select("id, cv").not("cv", "is", null),
+      supabase
+        .from("movimientos_stock")
+        .select("planta_id, producto_id, cantidad, cv, productores(nombre)")
+        .eq("tipo", "egreso")
+        .is("lote_id", null),
     ]);
 
-  // Stock de cada lote con su productor, para sugerir de quién sale un egreso
+  // Stock de cada lote con su productor y CV, después de repartir las
+  // salidas igual que la pantalla de Stock: para sugerir de quién sale un
+  // egreso y avisar si el CV no coincide.
   const idProductor = new Map((productores ?? []).map((p) => [p.nombre, p.id]));
-  const lotesStock = (stockLotes ?? []).map((l: any) => ({
-    planta_id: l.planta_id,
-    producto_id: l.producto_id,
-    productor_id: idProductor.get(l.productor) ?? null,
-    tn: Number(l.stock_actual_tn),
-  }));
+  const cvDeLote = new Map((lotesCv ?? []).map((l: any) => [l.id, l.cv as string]));
+  const lotesPorClave = new Map<string, any[]>();
+  (stockLotes ?? []).forEach((l: any) => {
+    const clave = `${l.planta_id}-${l.producto_id}`;
+    lotesPorClave.set(clave, [
+      ...(lotesPorClave.get(clave) ?? []),
+      {
+        planta_id: l.planta_id,
+        producto_id: l.producto_id,
+        productor: l.productor,
+        estado: l.estado,
+        fecha_ingreso: l.fecha_ingreso,
+        stock_actual_tn: Number(l.stock_actual_tn),
+        cv: cvDeLote.get(l.lote_id) ?? null,
+      },
+    ]);
+  });
+  repartirEgresos(
+    lotesPorClave,
+    (egresos ?? []).map((e: any) => ({
+      planta_id: e.planta_id,
+      producto_id: e.producto_id,
+      cantidad: Number(e.cantidad),
+      cv: e.cv ?? null,
+      productor: (Array.isArray(e.productores) ? e.productores[0]?.nombre : e.productores?.nombre) ?? null,
+    }))
+  );
+  const lotesStock = Array.from(lotesPorClave.values())
+    .flat()
+    .filter((l) => l.stock_actual_tn > 0.0005)
+    .map((l) => ({
+      planta_id: l.planta_id as string,
+      producto_id: l.producto_id as string,
+      productor_id: (idProductor.get(l.productor) as string | undefined) ?? null,
+      cv: l.cv as string | null,
+      tn: l.stock_actual_tn as number,
+    }));
 
   type FilaDescarte = {
     id: string;

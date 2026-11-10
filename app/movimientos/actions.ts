@@ -524,3 +524,35 @@ export async function cambiarCvEgreso(movimientoId: string, cvTexto: string): Pr
     return { ok: false, error: (e as Error).message };
   }
 }
+
+// ¿Esta CP ya está cargada? Se compara solo con movimientos del mismo tipo:
+// la misma CP puede ser el egreso de una planta y el ingreso en otra.
+export type CpCargada = { fecha: string | null; planta_id: string | null; producto_id: string | null; tn: number | null };
+
+export async function buscarCpCargada(numero: string, tipo: "ingreso" | "egreso" | "directo"): Promise<CpCargada[]> {
+  const digitos = (numero ?? "").replace(/\D/g, "");
+  if (digitos.length < 6) return [];
+  const supabase = createClient();
+  const cola = `%${digitos.slice(-6)}%`;
+  const igual = (n: string | null) => (n ?? "").replace(/\D/g, "") === digitos;
+
+  if (tipo === "ingreso") {
+    const { data } = await supabase
+      .from("lotes")
+      .select("numero_cp, fecha_ingreso, planta_id, producto_id, cantidad_ingresada")
+      .ilike("numero_cp", cola)
+      .limit(20);
+    return (data ?? [])
+      .filter((l: any) => igual(l.numero_cp))
+      .map((l: any) => ({ fecha: l.fecha_ingreso, planta_id: l.planta_id, producto_id: l.producto_id, tn: Number(l.cantidad_ingresada) }));
+  }
+  const { data } = await supabase
+    .from("movimientos_stock")
+    .select("numero_cp, fecha, planta_id, producto_id, cantidad")
+    .eq("tipo", tipo)
+    .ilike("numero_cp", cola)
+    .limit(20);
+  return (data ?? [])
+    .filter((m: any) => igual(m.numero_cp))
+    .map((m: any) => ({ fecha: m.fecha, planta_id: m.planta_id, producto_id: m.producto_id, tn: Number(m.cantidad) }));
+}
