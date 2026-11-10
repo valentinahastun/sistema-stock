@@ -12,8 +12,9 @@ export function hoyIso() {
 export const TIPOS_DESCARTE = [
   { campo: "segundilla_tn", tipo: "segundilla", nombre: "Segundilla", ayuda: "se puede volver a procesar" },
   { campo: "desc_electronica_tn", tipo: "electronica", nombre: "Desc. electrónica" },
-  { campo: "desc_vibradora_tn", tipo: "vibradora", nombre: "Desc. vibradora" },
+  { campo: "desc_vibradora_tn", tipo: "vibradora", nombre: "Desc. vibradora", ayuda: "o densimétrica" },
   { campo: "desc_clasificadora_tn", tipo: "clasificadora", nombre: "Desc. clasificadora" },
+  { campo: "desc_prelimpieza_tn", tipo: "prelimpieza", nombre: "Desc. prelimpieza", ayuda: "zarandas" },
   { campo: "desc_inutilizable_tn", tipo: "inutilizable", nombre: "Desc. inutilizable" },
 ] as const;
 
@@ -34,7 +35,7 @@ export type ValoresCierre = {
 export function cierreVacio(): ValoresCierre {
   return {
     procesado_tn: "", bolsas_25: "", bolsas_50: "", big_bags: "", fecha_fin: hoyIso(),
-    segundilla_tn: "", desc_electronica_tn: "", desc_vibradora_tn: "", desc_clasificadora_tn: "", desc_inutilizable_tn: "",
+    segundilla_tn: "", desc_electronica_tn: "", desc_vibradora_tn: "", desc_clasificadora_tn: "", desc_prelimpieza_tn: "", desc_inutilizable_tn: "",
   };
 }
 

@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { crearProceso } from "@/app/procesos/actions";
 import { CamposCierre } from "@/components/TarjetaProceso";
-import { tn, fechaCorta, hoyIso, cierreVacio, errorCierre, cierreParaGuardar, type ValoresCierre } from "@/lib/procesos";
+import { tn, fechaCorta, hoyIso, cierreVacio, errorCierre, cierreParaGuardar, TIPOS_DESCARTE, type ValoresCierre } from "@/lib/procesos";
+import type { ParteProceso } from "@/lib/parteProceso";
 
 type Catalogo = { id: string; nombre: string };
 
@@ -45,6 +46,101 @@ export default function ProcesoForm({
   const [elegidos, setElegidos] = useState<Record<string, string>>({});
   const [terminado, setTerminado] = useState(false);
   const [cierre, setCierre] = useState<ValoresCierre>(cierreVacio());
+  const [leyendo, setLeyendo] = useState(false);
+  const [lectura, setLectura] = useState<{ titulo: string; avisos: string[] } | null>(null);
+  const [errorParte, setErrorParte] = useState<string | null>(null);
+
+  // Parte de proceso de la planta (PDF): completa el formulario para revisar
+  async function subirParte(archivo: File) {
+    setLeyendo(true);
+    setErrorParte(null);
+    setLectura(null);
+    try {
+      const fd = new FormData();
+      fd.append("archivo", archivo);
+      const res = await fetch("/api/procesos/parte", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok || !json.ok) return setErrorParte(json.error ?? "No se pudo leer el parte.");
+      aplicarParte(json.parte as ParteProceso);
+    } catch (e) {
+      setErrorParte(`No se pudo leer el parte: ${(e as Error).message}`);
+    } finally {
+      setLeyendo(false);
+    }
+  }
+
+  function aplicarParte(pt: ParteProceso) {
+    const avisos = [...pt.avisos];
+    const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const pl = plantas.find((p) => norm(p.nombre) === norm(pt.planta));
+    if (!pl) {
+      setErrorParte(`No hay stock para procesar en ${pt.planta}: no encuentro lotes de esa planta.`);
+      return;
+    }
+    const lotesPlanta = lotes.filter((l) => l.planta_id === pl.id);
+    const pr =
+      productos.find((p) => norm(p.nombre) === norm(pt.producto ?? "")) ??
+      productos.find((p) => lotesPlanta.some((l) => l.producto_id === p.id) && norm(pt.producto ?? "").includes(norm(p.nombre).replace(/^poroto /, "")));
+    if (!pr) avisos.push(`No encontré el producto "${pt.producto ?? "?"}" con stock en ${pl.nombre}: elegilo a mano.`);
+
+    // Lotes que entran: primero por número de CP, después por productor
+    const nuevos: Record<string, string> = {};
+    if (pr) {
+      const disp = lotesPlanta
+        .filter((l) => l.producto_id === pr.id)
+        .sort((a, b) => (a.fecha_ingreso < b.fecha_ingreso ? -1 : 1))
+        .map((l) => ({ l, queda: l.stock_tn }));
+      const tomar = (d: { l: LoteDisponible; queda: number }, tnx: number) => {
+        const t = Math.min(tnx, d.queda);
+        if (t <= 0) return 0;
+        d.queda -= t;
+        nuevos[d.l.lote_id] = String(Math.round((num(nuevos[d.l.lote_id] ?? "0") + t) * 1000) / 1000);
+        return t;
+      };
+      const pendientes: { procedencia: string; tn: number; cp: string | null }[] = [];
+      for (const ing of pt.ingresos) {
+        const tnx = ing.kg / 1000;
+        const porCp = ing.cp
+          ? disp.find((d) => d.l.numero_cp && Number((d.l.numero_cp.match(/(\d+)\D*$/) ?? [])[1]) === Number(ing.cp))
+          : undefined;
+        const usado = porCp ? tomar(porCp, tnx) : 0;
+        if (tnx - usado > 0.0005) pendientes.push({ procedencia: ing.procedencia, tn: tnx - usado, cp: ing.cp });
+      }
+      const sinLote: string[] = [];
+      const porProductor = new Map<string, number>();
+      pendientes.forEach((x) => porProductor.set(x.procedencia, (porProductor.get(x.procedencia) ?? 0) + x.tn));
+      porProductor.forEach((tnx, proc) => {
+        let resto = tnx;
+        for (const d of disp.filter((d) => norm(d.l.productor).includes(norm(proc)) || norm(proc).includes(norm(d.l.productor)))) {
+          if (resto <= 0.0005) break;
+          resto -= tomar(d, resto);
+        }
+        if (resto > 0.0005) sinLote.push(`${proc}: ${tn(resto, 3)} tn`);
+      });
+      if (sinLote.length)
+        avisos.push(`No encontré stock natural para todo lo que dice el parte (${sinLote.join(", ")}). Tildá a mano lo que falte.`);
+    }
+
+    setPlanta(pl.id);
+    setProducto(pr?.id ?? "");
+    setElegidos(nuevos);
+    if (pt.numero) setNumero(pt.numero);
+    if (pt.fecha_inicio) setFecha(pt.fecha_inicio);
+    const c = cierreVacio();
+    const aTn = (k: number | null | undefined) => (k ? String(Math.round(k) / 1000).replace(".", ",") : "");
+    if (pt.procesado_kg) {
+      c.procesado_tn = aTn(pt.procesado_kg);
+      c.bolsas_25 = pt.bolsas_25 ? String(pt.bolsas_25) : "";
+      c.fecha_fin = pt.fecha_fin ?? hoyIso();
+      TIPOS_DESCARTE.forEach((t) => (c[t.campo] = aTn(pt.descartes[t.tipo as keyof ParteProceso["descartes"]])));
+      setTerminado(true);
+    }
+    setCierre(c);
+    pt.sin_clasificar.forEach((x) =>
+      avisos.push(`"${x.texto}" (${tn(x.kg / 1000, 3)} tn) no sé a qué tipo de descarte va: queda como volátil si no lo cargás.`)
+    );
+    setLectura({ titulo: `Leí el parte ${pt.numero ?? ""} de ${pt.formato}`, avisos });
+  }
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,6 +221,37 @@ export default function ProcesoForm({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-sm text-gray-700">
+            <b>¿Tenés el parte de la planta en PDF?</b> Subilo y completo el formulario para que lo revises.
+            <div className="text-xs text-gray-500">Por ahora leo el de Alimentos Tropicales. Si es una foto, mandámela por el chat.</div>
+          </div>
+          <label className="text-sm bg-white border border-gray-300 hover:border-brand-green rounded px-3 py-1.5 cursor-pointer">
+            {leyendo ? "Leyendo…" : "Subir parte (PDF)"}
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              disabled={leyendo}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) subirParte(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+        {errorParte && <p className="text-sm text-red-600 mt-2">{errorParte}</p>}
+        {lectura && (
+          <div className="mt-2 text-sm">
+            <div className="text-brand-green-dark font-medium">{lectura.titulo}. Revisá todo antes de guardar.</div>
+            {lectura.avisos.map((a, i) => (
+              <div key={i} className="text-amber-700 text-xs mt-1">⚠ {a}</div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className={paso}>
         <div className={titulo}>1 · Qué entra a procesar</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
