@@ -22,8 +22,14 @@ export default async function MovimientosPage() {
     );
   }
 
-  const [{ data: plantas }, { data: productos }, { data: productores }, { data: descartes }, { data: stock }] =
-    await Promise.all([
+  const [
+    { data: plantas },
+    { data: productos },
+    { data: productores },
+    { data: descartes },
+    { data: stock },
+    { data: stockLotes },
+  ] = await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
       supabase.from("productores").select("id, nombre").order("nombre"),
@@ -36,7 +42,17 @@ export default async function MovimientosPage() {
         .order("fecha", { ascending: false })
         .limit(100),
       supabase.from("stock_consolidado").select("planta_id, producto_id, stock_disponible_tn"),
+      supabase.from("stock_lotes").select("planta_id, producto_id, productor, stock_actual_tn").gt("stock_actual_tn", 0.0005),
     ]);
+
+  // Stock de cada lote con su productor, para sugerir de quién sale un egreso
+  const idProductor = new Map((productores ?? []).map((p) => [p.nombre, p.id]));
+  const lotesStock = (stockLotes ?? []).map((l: any) => ({
+    planta_id: l.planta_id,
+    producto_id: l.producto_id,
+    productor_id: idProductor.get(l.productor) ?? null,
+    tn: Number(l.stock_actual_tn),
+  }));
 
   type FilaDescarte = {
     id: string;
@@ -60,6 +76,7 @@ export default async function MovimientosPage() {
           producto_id: x.producto_id,
           tn: Number(x.stock_disponible_tn),
         }))}
+        lotesStock={lotesStock}
       />
 
       <h2 className="text-lg font-semibold mt-8 mb-3 text-brand-navy">
