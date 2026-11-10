@@ -2,7 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
-import TarjetaProceso, { type ProcesoVista } from "@/components/TarjetaProceso";
+import { type ProcesoVista } from "@/components/TarjetaProceso";
+import ProcesosPorPlanta from "@/components/ProcesosPorPlanta";
 import { tn } from "@/lib/procesos";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,7 @@ export default async function ProcesosPage({
 
   const entradaTerm = terminados.reduce((s, v) => s + v.entrada_tn, 0);
   const procTerm = terminados.reduce((s, v) => s + (v.procesado_tn ?? 0), 0);
+  const descTerm = terminados.reduce((s, v) => s + (v.descarte_tn ?? 0), 0);
 
   return (
     <div>
@@ -132,32 +134,17 @@ export default async function ProcesosPage({
         </div>
         <div className="rounded-lg bg-amber-50 p-3 col-span-2 sm:col-span-1">
           <div className="text-xs text-amber-700">Descarte total</div>
-          <div className="text-xl font-semibold text-amber-800">{tn(entradaTerm - procTerm, 1)} tn</div>
+          <div className="text-xl font-semibold text-amber-800">{tn(descTerm, 1)} tn</div>
           <div className="text-xs text-amber-700">de {tn(entradaTerm, 1)} tn que entraron</div>
         </div>
       </div>
 
-      <h2 className="text-sm font-semibold text-gray-700 mt-6 mb-2">En proceso</h2>
-      {enCurso.length ? (
-        <div className="space-y-3">
-          {enCurso.map((p) => (
-            <TarjetaProceso key={p.id} p={p} puedeEditar={puedeEditar} />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-gray-400">No hay nada en proceso ahora.</p>
-      )}
-
-      <h2 className="text-sm font-semibold text-gray-700 mt-6 mb-2">Terminados</h2>
-      {terminados.length ? (
-        <div className="space-y-3">
-          {terminados.map((p) => (
-            <TarjetaProceso key={p.id} p={p} puedeEditar={puedeEditar} />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-gray-400">Todavía no hay procesos terminados.</p>
-      )}
+      <div className="mt-6">
+        <ProcesosPorPlanta procesos={vistas} puedeEditar={puedeEditar} />
+      </div>
+      <p className="text-xs text-gray-400 mt-2">
+        Hacé clic en una planta para ver sus procesos. Los totales de entró, procesado, descarte y rinde son de los procesos terminados.
+      </p>
     </div>
   );
 }
