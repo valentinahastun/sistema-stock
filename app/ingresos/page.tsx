@@ -28,6 +28,7 @@ export default async function IngresosPage({
         "id, cantidad, fecha, observaciones, controlo_carga, lotes!lote_id(numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
+      .is("proceso_id", null)
       .order("fecha", { ascending: false })
       .limit(300),
   ]);

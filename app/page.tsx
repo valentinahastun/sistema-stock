@@ -44,8 +44,8 @@ export default async function Portada() {
   if (a.stock) {
     const [{ data: stock }, { data: ingresos }, { data: egresos }] = await Promise.all([
       supabase.from("stock_consolidado").select("stock_disponible_tn"),
-      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "ingreso"),
-      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "egreso"),
+      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "ingreso").is("proceso_id", null),
+      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "egreso").is("proceso_id", null),
     ]);
     const suma = (l: { [k: string]: unknown }[] | null, k: string) => (l ?? []).reduce((s, x) => s + Number(x[k]), 0);
     const tn = (n: number, dec = 1) => n.toLocaleString("es-AR", { maximumFractionDigits: dec });
@@ -60,6 +60,7 @@ export default async function Portada() {
       ],
       links: [
         { href: "/stock", texto: "Stock" },
+        { href: "/procesos", texto: "Procesos" },
         { href: "/ingresos", texto: "Ingresos" },
         { href: "/egresos", texto: "Egresos" },
       ],

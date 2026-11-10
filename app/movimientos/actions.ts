@@ -236,6 +236,11 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
       return { ok: false, error: "No se encontró el movimiento." };
     }
 
+    // Lo que movió un proceso se deshace desde la pantalla de Procesos
+    if (movimiento.proceso_id) {
+      return { ok: false, error: "Este movimiento es de un proceso. Borralo o corregilo desde Procesos." };
+    }
+
     if (movimiento.tipo === "ingreso") {
       // Ingreso de un lote de descarte generado por la caída de otro lote
       // (ej: Descarte Alubia): se deshace desde el descarte que lo generó,
