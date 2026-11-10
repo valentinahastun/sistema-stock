@@ -694,6 +694,10 @@ function analizarMensajes(msgs) {
         (!NO_APRUEBA.test(sinAcentos(m.texto)) || PROCEDER_ORIGINALES.test(sinAcentos(m.texto)))) {
       // El CV puede estar solo en el asunto de la respuesta ("RE: CV 26-110 // MC26652 ...")
       const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
+      // Si lo último que mandamos en el hilo fue solo el draft del BL, lo que aprueban
+      // es el BL, no los drafts ("Adjunto draft del BL" -> "El draft está ok").
+      const previo = (porHilo[m.hilo] || []).filter(x => x.fecha < m.fecha && delEquipo(x)).pop();
+      if (previo && soloDraftBl(previo)) return;
       add(m, 'draft_aprobado', cv, !!cv, cv ? 'El cliente aprobó los drafts (' + m.de + ')' : 'Aprobación de drafts sin CV en el asunto');
       return;
     }
@@ -746,6 +750,14 @@ const NO_APRUEBA = /\b(el\s+resto|resto\s+de|demas\s+(drafts|documentos|docs)|ag
 function esAdjuntoDraft(nombre) {
   const n = String(nombre).toLowerCase();
   return /draft|prefito|borrador|^origen\s*-\s*ag/.test(n) && !/scan|template/.test(n);
+}
+
+// Mail nuestro que manda solo el draft del BL (no el juego de drafts)
+function soloDraftBl(m) {
+  const t = sinAcentos(m.texto || '').toLowerCase();
+  const adj = (m.adjuntos || []).filter(a => !/\.(png|jpe?g|gif)$/i.test(a));
+  if (adj.length) return adj.every(a => esAdjuntoDraftBl(a) || /(^|[^a-z])b\/?l([^a-z]|$)/i.test(a)) && adj.length <= 2;
+  return /draft\s+(del\s+|de\s+)?b\/?l\b/.test(t) && !/drafts\b/.test(t);
 }
 
 function esAdjuntoDraftBl(nombre) {
@@ -1045,4 +1057,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarCompras, columnasCompras, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarCompras, columnasCompras, soloDraftBl, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
