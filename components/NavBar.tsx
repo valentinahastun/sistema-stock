@@ -23,7 +23,7 @@ export default async function NavBar() {
   if (a.stock) {
     grupos.push({
       nombre: "Stock",
-      base: "/stock|/procesos|/ingresos|/egresos|/movimientos|/catalogos|/auditoria",
+      base: "/stock|/procesos|/ingresos|/egresos|/movimientos|/catalogos",
       items: [
         { href: "/stock", texto: "Stock" },
         { href: "/procesos", texto: "Procesos" },
@@ -33,7 +33,6 @@ export default async function NavBar() {
           ? [
               { href: "/movimientos", texto: "Cargar movimiento" },
               { href: "/catalogos", texto: "Catálogos" },
-              { href: "/auditoria", texto: "Auditoría" },
             ]
           : []),
       ],
