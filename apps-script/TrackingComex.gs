@@ -86,15 +86,17 @@ function sincronizar() {
 // o si su CV ya cargó). Una celda de CV puede repartir la compra:
 // "48 TN 26-128 / 192 tn 26-134".
 function sincronizarCompras() {
-  const filas = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName('COMPRAS').getDataRange().getValues().slice(1);
-  const items = armarCompras(filas);
+  const datos = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName('COMPRAS').getDataRange().getValues();
+  // Columna "Planta" (opcional, en cualquier lugar): de qué planta se saca la compra
+  const iPlanta = datos[0].findIndex(h => /^\s*planta\s*$/i.test(String(h)));
+  const items = armarCompras(datos.slice(1), iPlanta);
   const r = rpc('stock_compras', { p_token: prop('TOKEN_SYNC'), p_items: items });
   Logger.log('Compras al stock: %s filas · nuevas: %s · actualizadas: %s · salteadas: %s%s',
     items.length, r.nuevas, r.actualizadas, r.salteadas, r.primera_vez ? ' (primera vez: solo se registraron)' : '');
   return r;
 }
 
-function armarCompras(filas) {
+function armarCompras(filas, iPlanta) {
   const vistos = {};
   const items = [];
   filas.forEach(f => {
@@ -118,6 +120,7 @@ function armarCompras(filas) {
     }
     partes.forEach((p, i) => items.push({
       clave: clave + '|' + (i + 1), fecha, productor: txt(f[2]).trim(), producto,
+      planta: iPlanta >= 0 ? txt(f[iPlanta]).trim() : '',
       estado: txt(f[6]).trim().toLowerCase(), tn: p.tn, cv: p.cv,
     }));
   });
