@@ -3,14 +3,19 @@
 -- stock que cargamos el 05/11 ya es el resultado de estos procesos.
 -- Valores en toneladas (la planilla está en kg).
 
-begin;
+-- Todo va en un solo bloque: si algo no coincide con los catálogos, no carga nada.
+do $$
+declare
+  x record;
+  v_planta uuid;
+  v_producto uuid;
+begin
+  if exists (select 1 from public.procesos where historico) then
+    raise exception 'Los procesos de la planilla ya estaban cargados.';
+  end if;
 
-create temp table _proc (
-  numero text, planta text, producto text, fecha date, productores text, cv text,
-  entrada numeric(12, 3), procesado numeric(12, 3), descarte numeric(12, 3), obs text
-) on commit drop;
-
-insert into _proc values
+  for x in
+    select * from (values
   -- Legucer
   ('47', 'LEGUCER', 'Poroto Negro', '2026-04-13', 'Río Blanco del Tontón, La Bajada, Palacio José Luis',
    'CV 26-044, CV 26-057, CV 26-062 A, CV 26-062 B', 366.015, 364.185, 1.830,
@@ -37,45 +42,35 @@ insert into _proc values
   (null, 'ALIMENTOS TROPICALES', 'Poroto Alubia', '2026-07-28', 'Flores, Santa Cecilia', 'CV 26-079, CV 26-080 A', 231.250, 208.600, 22.650, null),
   (null, 'ALIMENTOS TROPICALES', 'Poroto Alubia', '2026-08-21', 'Palacios Pantaleón, Flores Enrique', 'CV 26-092, CV 26-090', 316.310, 268.000, 48.310, null),
   -- Fracoga
-  (null, 'FRACOGA', 'Poroto Negro', '2026-08-14', 'Decrops', 'CV 26-088 B', 16.440, 15.160, 1.280, null);
+  (null, 'FRACOGA', 'Poroto Negro', '2026-08-14', 'Decrops', 'CV 26-088 B', 16.440, 15.160, 1.280, null)
+    ) as t(numero, planta, producto, fecha, productores, cv, entrada, procesado, descarte, obs)
+  loop
+    select id into v_planta from public.plantas where nombre = x.planta;
+    select id into v_producto from public.productos
+    where nombre = x.producto or (x.producto = 'Poroto Mung' and nombre = 'Poroto Mungo')
+    order by (nombre = x.producto) desc limit 1;
+    if v_planta is null or v_producto is null then
+      raise exception 'No encontré en los catálogos: % / %', x.planta, x.producto;
+    end if;
 
-do $$
-declare v_faltan text;
-begin
-  select string_agg(distinct x.planta || ' / ' || x.producto, ', ') into v_faltan
-  from _proc x
-  where not exists (select 1 from public.plantas p where p.nombre = x.planta)
-     or not exists (select 1 from public.productos p
-                    where p.nombre = x.producto or (x.producto = 'Poroto Mung' and p.nombre = 'Poroto Mungo'));
-  if v_faltan is not null then raise exception 'No encontré en los catálogos: %', v_faltan; end if;
-  if exists (select 1 from public.procesos where historico) then
-    raise exception 'Los procesos de la planilla ya estaban cargados.';
-  end if;
+    insert into public.procesos (numero, planta_id, producto_id, cv, estado, fecha_inicio, fecha_fin,
+                                 entrada_tn, procesado_tn, descarte_tn, historico, productores_texto, observaciones)
+    values (x.numero, v_planta, v_producto, x.cv, 'terminado', x.fecha::date, x.fecha::date,
+            x.entrada, x.procesado, x.descarte, true, x.productores,
+            coalesce(x.obs || ' ', '') || 'Cargado de la planilla Proceso_Stock.');
+  end loop;
+
+  -- Los lotes del stock inicial que salieron de un solo proceso numerado quedan ligados a él
+  update public.lotes l
+  set proceso_id = pr.id
+  from public.movimientos_stock m, public.procesos pr
+  where m.lote_id = l.id and m.tipo = 'ingreso'
+    and m.observaciones like '%inicial 05/11/2026%'
+    and pr.historico and pr.numero is not null and pr.planta_id = l.planta_id
+    and m.observaciones ~ ('Proceso ' || pr.numero || '( |$)')
+    and m.observaciones !~* 'proceso.*proceso'
+    and l.proceso_id is null;
 end $$;
-
-insert into public.procesos (numero, planta_id, producto_id, cv, estado, fecha_inicio, fecha_fin,
-                             entrada_tn, procesado_tn, descarte_tn, historico, productores_texto, observaciones)
-select x.numero, pl.id,
-       (select p.id from public.productos p
-        where p.nombre = x.producto or (x.producto = 'Poroto Mung' and p.nombre = 'Poroto Mungo')
-        order by (p.nombre = x.producto) desc limit 1),
-       x.cv, 'terminado', x.fecha, x.fecha, x.entrada, x.procesado, x.descarte, true, x.productores,
-       coalesce(x.obs || ' ', '') || 'Cargado de la planilla Proceso_Stock.'
-from _proc x
-join public.plantas pl on pl.nombre = x.planta;
-
--- Los lotes del stock inicial que salieron de un solo proceso numerado quedan ligados a él
-update public.lotes l
-set proceso_id = pr.id
-from public.movimientos_stock m, public.procesos pr
-where m.lote_id = l.id and m.tipo = 'ingreso'
-  and m.observaciones like '%inicial 05/11/2026%'
-  and pr.historico and pr.numero is not null and pr.planta_id = l.planta_id
-  and m.observaciones ~ ('Proceso ' || pr.numero || '( |$)')
-  and m.observaciones !~* 'proceso.*proceso'
-  and l.proceso_id is null;
-
-commit;
 
 select coalesce('Proceso ' || numero, 'Proceso del ' || to_char(fecha_inicio, 'DD/MM')) as proceso,
        entrada_tn, procesado_tn, descarte_tn,
