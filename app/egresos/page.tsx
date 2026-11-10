@@ -4,6 +4,7 @@ import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
 import CeldaCvEgreso from "@/components/CeldaCvEgreso";
+import CeldaProductorEgreso from "@/components/CeldaProductorEgreso";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -20,7 +21,7 @@ export default async function EgresosPage({
   const perfil = await getPerfilActual();
   const esAdmin = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: movimientos }] = await Promise.all([
+  const [{ data: plantas }, { data: productos }, { data: movimientos }, { data: productores }] = await Promise.all([
     supabase.from("plantas").select("id, nombre").order("nombre"),
     supabase.from("productos").select("id, nombre").order("nombre"),
     supabase
@@ -32,7 +33,9 @@ export default async function EgresosPage({
       .is("proceso_id", null)
       .order("fecha", { ascending: false })
       .limit(300),
+    supabase.from("productores").select("nombre").order("nombre"),
   ]);
+  const nombresProductores = (productores ?? []).map((p) => p.nombre as string);
 
   type Fila = {
     id: string;
@@ -137,7 +140,18 @@ export default async function EgresosPage({
                   <td className="px-4 py-2 whitespace-nowrap">{f.fecha}</td>
                   <td className="px-4 py-2">{d.planta}</td>
                   <td className="px-4 py-2">{d.producto}</td>
-                  <td className="px-4 py-2">{d.productor}</td>
+                  <td className="px-4 py-2">
+                    {f.lotes ? (
+                      d.productor
+                    ) : (
+                      <CeldaProductorEgreso
+                        movimientoId={f.id}
+                        productor={d.productor === "—" ? null : d.productor}
+                        productores={nombresProductores}
+                        puedeEditar={esAdmin}
+                      />
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-xs text-gray-600">
                     {f.numero_cp && <div>CP {f.numero_cp}</div>}
                     {(f.transportista || f.chofer || f.patente) && (
