@@ -24,7 +24,7 @@ export default async function ProcesosPage({
   let consulta = supabase
     .from("procesos")
     .select(
-      "id, numero, cv, estado, fecha_inicio, fecha_fin, entrada_tn, procesado_tn, descarte_tn, bolsas_25, bolsas_50, big_bags, segundilla_tn, desc_electronica_tn, desc_vibradora_tn, desc_clasificadora_tn, desc_inutilizable_tn, volatil_tn, historico, productores_texto, observaciones, planta_id, producto_id, plantas(nombre), productos(nombre), proceso_entradas(cantidad, lotes(proceso_id, productores(nombre)))"
+      "id, numero, cv, estado, fecha_inicio, fecha_fin, entrada_tn, procesado_tn, descarte_tn, bolsas_25, bolsas_50, big_bags, segundilla_tn, desc_electronica_tn, desc_vibradora_tn, desc_clasificadora_tn, desc_prelimpieza_tn, desc_inutilizable_tn, volatil_tn, historico, productores_texto, observaciones, planta_id, producto_id, plantas(nombre), productos(nombre), proceso_entradas(cantidad, lotes(proceso_id, productores(nombre)))"
     )
     .order("fecha_inicio", { ascending: false })
     .limit(300);
