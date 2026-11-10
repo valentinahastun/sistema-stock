@@ -87,29 +87,39 @@ function sincronizar() {
 // "48 TN 26-128 / 192 tn 26-134".
 function sincronizarCompras() {
   const datos = SpreadsheetApp.openById(CONFIG.ID_SEGUIMIENTO).getSheetByName('COMPRAS').getDataRange().getValues();
-  // Columna "Planta" (opcional, en cualquier lugar): de qué planta se saca la compra
-  const iPlanta = datos[0].findIndex(h => /^\s*planta\s*$/i.test(String(h)));
-  const items = armarCompras(datos.slice(1), iPlanta);
+  const items = armarCompras(datos.slice(1), columnasCompras(datos[0]));
   const r = rpc('stock_compras', { p_token: prop('TOKEN_SYNC'), p_items: items });
   Logger.log('Compras al stock: %s filas · nuevas: %s · actualizadas: %s · salteadas: %s%s',
     items.length, r.nuevas, r.actualizadas, r.salteadas, r.primera_vez ? ' (primera vez: solo se registraron)' : '');
   return r;
 }
 
-function armarCompras(filas, iPlanta) {
+// Columnas de COMPRAS por su título (así se pueden agregar o mover columnas).
+// "Planta" es opcional: de qué planta se saca la compra.
+function columnasCompras(cab) {
+  const t = cab.map(h => sinAcentos(String(h)).trim().toLowerCase());
+  const col = (re, def) => { const i = t.findIndex(h => re.test(h)); return i >= 0 ? i : def; };
+  return {
+    fecha: col(/^fecha$/, 0), cv: col(/^cv$/, 1), productor: col(/^productor$/, 2),
+    producto: col(/^producto$/, 4), estado: col(/^estado$/, 6), tn: col(/^tn$/, 7), planta: col(/^planta$/, -1),
+  };
+}
+
+function armarCompras(filas, c) {
+  c = c || { fecha: 0, cv: 1, productor: 2, producto: 4, estado: 6, tn: 7, planta: -1 };
   const vistos = {};
   const items = [];
   filas.forEach(f => {
-    const producto = txt(f[4]).trim();
-    const s = String(f[7] || '').trim();
-    const tn = typeof f[7] === 'number' ? f[7] : Number(s.indexOf(',') >= 0 ? s.replace(/\./g, '').replace(',', '.') : s);
+    const producto = txt(f[c.producto]).trim();
+    const s = String(f[c.tn] || '').trim();
+    const tn = typeof f[c.tn] === 'number' ? f[c.tn] : Number(s.indexOf(',') >= 0 ? s.replace(/\./g, '').replace(',', '.') : s);
     if (!producto || !(tn > 0)) return;
-    const fecha = esFecha(f[0]) ? iso(f[0]) : fechaCelda(f[0]);
+    const fecha = esFecha(f[c.fecha]) ? iso(f[c.fecha]) : fechaCelda(f[c.fecha]);
     // Clave estable: fecha + producto + orden entre las compras de ese día y producto
     const base = (fecha || 'sin-fecha') + '|' + sinAcentos(producto).toLowerCase();
     vistos[base] = (vistos[base] || 0) + 1;
     const clave = base + '|' + vistos[base];
-    const textoCv = txt(f[1]);
+    const textoCv = txt(f[c.cv]);
     const partes = [];
     const re = /(\d+(?:[.,]\d+)?)\s*tn\s*(?:cv\s*)?(\d{2})\s*-\s*(\d{3})(?:\s*([A-Z])(?![A-Za-z]))?/gi;
     let m;
@@ -119,9 +129,9 @@ function armarCompras(filas, iPlanta) {
       partes.push({ tn, cv: u ? 'CV ' + u[1] + '-' + u[2] + (u[3] ? ' ' + u[3].toUpperCase() : '') : null });
     }
     partes.forEach((p, i) => items.push({
-      clave: clave + '|' + (i + 1), fecha, productor: txt(f[2]).trim(), producto,
-      planta: iPlanta >= 0 ? txt(f[iPlanta]).trim() : '',
-      estado: txt(f[6]).trim().toLowerCase(), tn: p.tn, cv: p.cv,
+      clave: clave + '|' + (i + 1), fecha, productor: txt(f[c.productor]).trim(), producto,
+      planta: c.planta >= 0 ? txt(f[c.planta]).trim() : '',
+      estado: txt(f[c.estado]).trim().toLowerCase(), tn: p.tn, cv: p.cv,
     }));
   });
   return items;
@@ -1035,4 +1045,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarCompras, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { armarCompras, columnasCompras, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
