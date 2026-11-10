@@ -1,6 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+import { cache } from "react";
+import { usuarioActual } from "@/lib/supabase/sesion";
 import { getPerfilActual, type Perfil } from "@/lib/supabase/profile";
-import type { Usuario } from "@/lib/usuario";
+import { getUsuario, type Usuario } from "@/lib/usuario";
 
 export type Accesos = {
   email: string;
@@ -14,19 +15,14 @@ export type Accesos = {
 const NOMBRES: Record<string, string> = { lourdes: "Lourdes", valentina: "Valentina" };
 
 // Qué partes de la plataforma ve la persona logueada.
-export async function getAccesos(): Promise<Accesos | null> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+// Perfil de stock y permiso de operaciones se piden a la vez.
+export const getAccesos = cache(async (): Promise<Accesos | null> => {
+  const user = await usuarioActual();
   if (!user?.email) return null;
-  const email = user.email.toLowerCase();
+  const email = user.email;
 
-  const [perfil, { data: op }] = await Promise.all([
-    getPerfilActual(),
-    supabase.from("op_usuarios").select("email, rol, responsable").eq("email", email).maybeSingle(),
-  ]);
-  const operaciones = (op as Usuario | null) ?? null;
+  const [perfil, usuario] = await Promise.all([getPerfilActual(), getUsuario()]);
+  const operaciones = usuario?.acceso ?? null;
 
   return {
     email,
@@ -36,4 +32,4 @@ export async function getAccesos(): Promise<Accesos | null> {
     stock: !!perfil && perfil.rol !== "calidad",
     calidad: !!perfil,
   };
-}
+});

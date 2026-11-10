@@ -29,9 +29,10 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifica la firma del token sin ir a Supabase (claves
+  // asimétricas) y, si venció, lo renueva.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
   // /auth/callback tiene que poder abrirse sin sesión: ahí se crea la
