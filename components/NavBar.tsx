@@ -18,9 +18,14 @@ export default async function NavBar() {
               Panel
             </Link>
             {perfil.rol !== "calidad" && (
-              <Link href="/stock" className="hover:text-brand-green">
-                Stock
-              </Link>
+              <>
+                <Link href="/stock" className="hover:text-brand-green">
+                  Stock
+                </Link>
+                <Link href="/procesos" className="hover:text-brand-green">
+                  Procesos
+                </Link>
+              </>
             )}
             <Link href="/calidad" className="hover:text-brand-green">
               Calidad

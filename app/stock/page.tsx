@@ -13,7 +13,7 @@ export default async function StockPage({
   const perfil = await getPerfilActual();
   const puedeEditar = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }, { data: bolsas }, { data: egresos }] =
+  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }, { data: bolsas }, { data: egresos }, { data: aProceso }, { data: enProceso }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -26,12 +26,28 @@ export default async function StockPage({
         )
         .order("fecha_ingreso", { ascending: false }),
       supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
-      supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags"),
+      supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags, proceso_id, procesos!lotes_proceso_id_fkey(numero)"),
       supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv").eq("tipo", "egreso").is("lote_id", null),
+      // Lo que entró de cada lote a un proceso
+      supabase.from("proceso_entradas").select("lote_id, cantidad, procesos(numero)"),
+      supabase
+        .from("procesos")
+        .select("id, numero, entrada_tn, fecha_inicio, planta_id, producto_id, plantas(nombre), productos(nombre)")
+        .eq("estado", "en_proceso")
+        .order("fecha_inicio"),
     ]);
 
+  const numeroDe = (rel: any) => (Array.isArray(rel) ? rel[0]?.numero : rel?.numero) ?? "sin número";
+  const nombreRel = (rel: any) => (Array.isArray(rel) ? rel[0]?.nombre : rel?.nombre) ?? "";
+  const aProcesoPorLote = new Map<string, { proceso: string; tn: number }[]>();
+  (aProceso ?? []).forEach((e: any) => {
+    const lista = aProcesoPorLote.get(e.lote_id) ?? [];
+    lista.push({ proceso: numeroDe(e.procesos), tn: Number(e.cantidad) });
+    aProcesoPorLote.set(e.lote_id, lista);
+  });
+
   // Bolsas de cada lote (25 kg, 50 kg, big bags)
-  const bolsasPorLote = new Map<string, { cv: string | null; bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null }>();
+  const bolsasPorLote = new Map<string, { cv: string | null; bolsas_25: number | null; bolsas_50: number | null; big_bags: number | null; proceso_id: string | null; procesos: any }>();
   (bolsas ?? []).forEach((b: any) => bolsasPorLote.set(b.id, b));
 
   // Descarte real ya cargado en cada lote (para los lotes procesados)
@@ -43,6 +59,10 @@ export default async function StockPage({
   const lotesPorClave = new Map<string, LoteDetalle[]>();
   (lotes ?? []).forEach((l: any) => {
     const clave = `${l.planta_id}-${l.producto_id}`;
+    const aProc = aProcesoPorLote.get(l.lote_id);
+    // Un lote que entró entero a un proceso ya no se muestra (está en el proceso)
+    if (aProc && Number(l.stock_actual_tn) <= 0.0005) return;
+    const extra = bolsasPorLote.get(l.lote_id);
     const lista = lotesPorClave.get(clave) ?? [];
     lista.push({
       lote_id: l.lote_id,
@@ -57,6 +77,8 @@ export default async function StockPage({
       bolsas_50: bolsasPorLote.get(l.lote_id)?.bolsas_50 ?? null,
       big_bags: bolsasPorLote.get(l.lote_id)?.big_bags ?? null,
       cv: bolsasPorLote.get(l.lote_id)?.cv ?? null,
+      de_proceso: extra?.proceso_id ? numeroDe(extra.procesos) : null,
+      a_proceso: aProc ?? [],
     });
     lotesPorClave.set(clave, lista);
   });
@@ -161,6 +183,28 @@ export default async function StockPage({
         productoSeleccionado={searchParams.producto_id ?? ""}
         basePath="/stock"
       />
+
+      {(enProceso ?? []).length > 0 && (
+        <div className="mt-4 rounded-lg bg-sky-50 border border-sky-100 p-3">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-sm font-semibold text-sky-800">En proceso ahora</span>
+            <Link href="/procesos" className="text-xs text-sky-700 underline">
+              Ver procesos
+            </Link>
+          </div>
+          <p className="text-xs text-sky-700 mb-2">
+            Esto salió del stock natural y vuelve como procesado y descarte cuando se cierra el proceso.
+          </p>
+          <ul className="text-sm text-sky-900 space-y-0.5">
+            {(enProceso ?? []).map((p: any) => (
+              <li key={p.id}>
+                {p.numero ? `Proceso ${p.numero}` : "Proceso sin número"} · {nombreRel(p.productos)} · {nombreRel(p.plantas)}:{" "}
+                <b>{Number(p.entrada_tn).toLocaleString("es-AR", { maximumFractionDigits: 2 })} tn</b>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-4">
         <StockAgrupado

@@ -19,6 +19,8 @@ export type LoteDetalle = {
   cv?: string | null; // CV al que está comprometido el lote
   salidas_tn?: number; // egresos (por planta/producto) que se descuentan de este lote
   salidas?: { cv: string | null; tn: number }[]; // a qué CV salió y cuánto
+  de_proceso?: string | null; // número del proceso del que salió este lote
+  a_proceso?: { proceso: string; tn: number }[]; // lo que entró de este lote a procesos
 };
 
 export type FilaBase = {
@@ -390,7 +392,12 @@ function FilaLote({
           <span className="text-gray-400">libre</span>
         )}
       </td>
-      <td className="px-2 py-1.5 capitalize">{lote.estado}</td>
+      <td className="px-2 py-1.5">
+        <span className="capitalize">{lote.estado}</span>
+        {lote.de_proceso && (
+          <div className="text-[10px] text-gray-400 whitespace-nowrap">del proceso {lote.de_proceso}</div>
+        )}
+      </td>
       <td className="px-2 py-1.5">
         {lote.estado === "natural" ? "—" : <CeldaBolsas lote={lote} puedeEditar={puedeEditar} />}
       </td>
@@ -401,6 +408,15 @@ function FilaLote({
             {lote.salidas.map((s, i) => (
               <div key={i}>
                 salieron {s.tn.toFixed(2)} {s.cv ? `a ${s.cv}` : "sin CV"}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {lote.a_proceso?.length ? (
+          <div className="text-[10px] text-sky-600 whitespace-nowrap">
+            {lote.a_proceso.map((s, i) => (
+              <div key={i}>
+                entraron {s.tn.toFixed(2)} al proceso {s.proceso}
               </div>
             ))}
           </div>

@@ -29,6 +29,7 @@ export default async function EgresosPage({
         "id, cantidad, fecha, motivo, observaciones, cv, controlo_carga, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
+      .is("proceso_id", null)
       .order("fecha", { ascending: false })
       .limit(300),
   ]);

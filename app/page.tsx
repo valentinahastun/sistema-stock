@@ -24,8 +24,8 @@ export default async function PanelPage() {
   if (!esCalidad) {
     const [{ data: stock }, { data: ingresos }, { data: egresos }] = await Promise.all([
       supabase.from("stock_consolidado").select("stock_disponible_tn"),
-      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "ingreso"),
-      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "egreso"),
+      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "ingreso").is("proceso_id", null),
+      supabase.from("movimientos_stock").select("cantidad").eq("tipo", "egreso").is("proceso_id", null),
     ]);
 
     const totalStock = (stock ?? []).reduce((acc, s) => acc + Number(s.stock_disponible_tn), 0);
