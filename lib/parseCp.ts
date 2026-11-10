@@ -196,7 +196,20 @@ export function parseCp(lineas: string[]): CpParseada {
   const tipoGrano = lineaGrano
     ? valorTrasEtiqueta(lineaGrano, /\bTipo\s*:/i, [/Campa[ñn]a\s*:?/i])
     : null;
-  const granoTipo = [especie, tipoGrano].filter(Boolean).join(" · ") || null;
+  let granoTipo = [especie, tipoGrano].filter(Boolean).join(" · ") || null;
+  // A veces el "Tipo" ocupa dos renglones ("POROTO CRANBERRY (Phaseolus vulgaris" /
+  // "variety cranberry)") y la variedad queda fuera del renglón del grano. Si el
+  // texto leído no nombra ninguna variedad, se busca en los renglones de al lado.
+  const VARIEDAD = /\b(alubia|negro|cranberry|garbanzo|mung|colorado|adzuki|azuki)\b/i;
+  if (!VARIEDAD.test(granoTipo ?? "")) {
+    const desde = Math.max(
+      0,
+      seccionB.findIndex((l) => /Grano\s*\/\s*especie|\bTipo\s*:/i.test(l))
+    );
+    const cerca = seccionB.slice(desde, desde + 4).join(" ");
+    const variedad = cerca.match(VARIEDAD)?.[1];
+    if (variedad) granoTipo = [granoTipo, `POROTO ${variedad.toUpperCase()}`].filter(Boolean).join(" · ");
+  }
 
   // Peso neto: el número que viene pegado a la etiqueta "Peso Neto (kg):".
   // Sección B = lo que se cargó; sección G = lo que se descargó (vacío si
