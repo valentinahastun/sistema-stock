@@ -475,6 +475,38 @@ function normalizarCv(texto: string): string | null {
 }
 
 // Cambia (o saca) el CV de una salida ya cargada.
+// Productor de una salida (si se olvidó al cargarla). Si no existe, se crea.
+export async function cambiarProductorEgreso(movimientoId: string, nombre: string): Promise<Resultado> {
+  try {
+    await verificarAdmin();
+    const supabase = createClient();
+    const texto = nombre.trim().replace(/\s+/g, " ");
+    let productorId: string | null = null;
+    if (texto) {
+      const { data: existentes, error: e1 } = await supabase.from("productores").select("id, nombre");
+      if (e1) return { ok: false, error: e1.message };
+      const igual = (existentes ?? []).find((p) => p.nombre.trim().toLowerCase() === texto.toLowerCase());
+      if (igual) productorId = igual.id;
+      else {
+        const { data: creado, error: e2 } = await supabase.from("productores").insert({ nombre: texto }).select("id").single();
+        if (e2 || !creado) return { ok: false, error: e2?.message ?? "No se pudo agregar el productor." };
+        productorId = creado.id;
+      }
+    }
+    const { error } = await supabase
+      .from("movimientos_stock")
+      .update({ productor_id: productorId })
+      .eq("id", movimientoId)
+      .eq("tipo", "egreso");
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/egresos");
+    revalidatePath("/catalogos");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 export async function cambiarCvEgreso(movimientoId: string, cvTexto: string): Promise<Resultado> {
   try {
     await verificarAdmin();
