@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { crearProceso } from "@/app/procesos/actions";
-import { CamposCierre, type ValoresCierre } from "@/components/TarjetaProceso";
-import { tn, fechaCorta, hoyIso } from "@/lib/procesos";
+import { CamposCierre } from "@/components/TarjetaProceso";
+import { tn, fechaCorta, hoyIso, cierreVacio, errorCierre, cierreParaGuardar, type ValoresCierre } from "@/lib/procesos";
 
 type Catalogo = { id: string; nombre: string };
 
@@ -20,6 +20,7 @@ export type LoteDisponible = {
   cv: string | null;
   de_proceso: boolean;
   proceso: string | null;
+  tipo_descarte: string | null; // "segundilla" cuando es segundilla que vuelve a proceso
 };
 
 const num = (s: string) => Number(s.replace(",", "."));
@@ -43,7 +44,7 @@ export default function ProcesoForm({
   // lote_id -> tn que entran ("" = no entra)
   const [elegidos, setElegidos] = useState<Record<string, string>>({});
   const [terminado, setTerminado] = useState(false);
-  const [cierre, setCierre] = useState<ValoresCierre>({ procesado_tn: "", bolsas_25: "", bolsas_50: "", big_bags: "", fecha_fin: hoyIso() });
+  const [cierre, setCierre] = useState<ValoresCierre>(cierreVacio());
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,9 +95,8 @@ export default function ProcesoForm({
         return setError(`Del lote de ${e.lote.productor} hay ${tn(e.lote.stock_tn, 3)} tn.`);
     }
     if (terminado) {
-      const p = num(cierre.procesado_tn);
-      if (!cierre.procesado_tn || Number.isNaN(p) || p <= 0) return setError("Poné cuántas tn salieron procesadas.");
-      if (p > totalEntra + 0.0005) return setError("Salió más de lo que entró.");
+      const e = errorCierre(cierre, totalEntra);
+      if (e) return setError(e);
       if (cierre.fecha_fin < fecha) return setError("La fecha de fin es anterior al inicio.");
     }
     setGuardando(true);
@@ -110,7 +110,7 @@ export default function ProcesoForm({
         observaciones: obs,
         entradas: entradas.map((e) => ({ lote_id: e.lote.lote_id, cantidad: e.tn })),
       },
-      terminado ? { ...cierre, procesado_tn: String(num(cierre.procesado_tn)) } : null
+      terminado ? cierreParaGuardar(cierre) : null
     );
     setGuardando(false);
     if (r.ok) {
@@ -163,7 +163,7 @@ export default function ProcesoForm({
                   <div className="flex-1 min-w-0 text-sm">
                     <div className="text-gray-800 truncate">{l.productor}</div>
                     <div className="text-xs text-gray-500">
-                      {l.estado === "natural" ? "Natural" : l.de_proceso ? `Procesado · salió del proceso ${l.proceso ?? "sin número"}` : "Procesado"}
+                      {l.tipo_descarte === "segundilla" ? `Segundilla${l.de_proceso ? ` · del proceso ${l.proceso ?? "sin número"}` : ""}` : l.estado === "natural" ? "Natural" : l.de_proceso ? `Procesado · salió del proceso ${l.proceso ?? "sin número"}` : "Procesado"}
                       {" · "}ingresó {fechaCorta(l.fecha_ingreso)}
                       {l.numero_cp ? ` · CP ${l.numero_cp}` : ""}
                       {l.cv ? ` · ${l.cv}` : ""}

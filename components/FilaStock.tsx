@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmarCaidaEstimada, guardarBolsas } from "@/app/stock/actions";
+import { NOMBRE_TIPO_DESCARTE } from "@/lib/procesos";
 
 export type LoteDetalle = {
   lote_id: string;
@@ -21,6 +22,7 @@ export type LoteDetalle = {
   salidas?: { cv: string | null; tn: number }[]; // a qué CV salió y cuánto
   de_proceso?: string | null; // número del proceso del que salió este lote
   a_proceso?: { proceso: string; tn: number }[]; // lo que entró de este lote a procesos
+  tipo_descarte?: string | null; // segundilla, electrónica, ... (descarte que salió de un proceso)
 };
 
 export type FilaBase = {
@@ -393,7 +395,13 @@ function FilaLote({
         )}
       </td>
       <td className="px-2 py-1.5">
-        <span className="capitalize">{lote.estado}</span>
+        {lote.tipo_descarte ? (
+          <span className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5 whitespace-nowrap">
+            {NOMBRE_TIPO_DESCARTE[lote.tipo_descarte] ?? lote.tipo_descarte}
+          </span>
+        ) : (
+          <span className="capitalize">{lote.estado}</span>
+        )}
         {lote.de_proceso && (
           <div className="text-[10px] text-gray-400 whitespace-nowrap">del proceso {lote.de_proceso}</div>
         )}

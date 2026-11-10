@@ -18,13 +18,7 @@ export type NuevoProceso = {
   entradas: EntradaProceso[];
 };
 
-export type CierreProceso = {
-  procesado_tn: string;
-  bolsas_25: string;
-  bolsas_50: string;
-  big_bags: string;
-  fecha_fin: string;
-};
+import type { ValoresCierre as CierreProceso } from "@/lib/procesos";
 
 function refrescar() {
   ["/procesos", "/stock", "/", "/movimientos"].forEach((p) => revalidatePath(p));
