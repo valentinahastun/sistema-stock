@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cerrarProceso, deshacerCierre, eliminarProceso } from "@/app/procesos/actions";
-import { tn, fechaCorta, hoyIso } from "@/lib/procesos";
+import { tn, fechaCorta, TIPOS_DESCARTE, cierreVacio, cuentasCierre, errorCierre, cierreParaGuardar, type ValoresCierre } from "@/lib/procesos";
 
 export type ProcesoVista = {
   id: string;
@@ -20,6 +20,7 @@ export type ProcesoVista = {
   bolsas_25: number | null;
   bolsas_50: number | null;
   big_bags: number | null;
+  descartes: { nombre: string; tn: number }[]; // reparto del descarte (con volátil)
   historico: boolean;
   observaciones: string | null;
   productores: string[];
@@ -137,6 +138,15 @@ export default function TarjetaProceso({ p, puedeEditar }: { p: ProcesoVista; pu
       )}
 
       <div className="text-xs text-gray-500 mt-2 space-y-0.5">
+        {p.descartes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {p.descartes.map((d) => (
+              <span key={d.nombre} className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5">
+                {d.nombre}: {tn(d.tn, 3)} tn
+              </span>
+            ))}
+          </div>
+        )}
         {textoBolsas(p) && <div>Embolsado: {textoBolsas(p)}</div>}
         {p.viene_de.length > 0 && <div>Es un reproceso de lo que salió del {p.viene_de.map((n) => nombreProceso(n)).join(", ")}</div>}
         {p.reprocesado_en.length > 0 && (
@@ -199,13 +209,7 @@ export default function TarjetaProceso({ p, puedeEditar }: { p: ProcesoVista; pu
   );
 }
 
-export type ValoresCierre = {
-  procesado_tn: string;
-  bolsas_25: string;
-  bolsas_50: string;
-  big_bags: string;
-  fecha_fin: string;
-};
+export type { ValoresCierre } from "@/lib/procesos";
 
 
 // Lo que salió del proceso: tn procesadas y bolsas. El descarte es la diferencia.
@@ -218,12 +222,12 @@ export function CamposCierre({
   v: ValoresCierre;
   set: (v: ValoresCierre) => void;
 }) {
-  const proc = Number(v.procesado_tn.replace(",", "."));
-  const valido = v.procesado_tn !== "" && !Number.isNaN(proc) && proc > 0;
+  const { proc, descarte, tipos, volatil } = cuentasCierre(v, entradaTn);
+  const valido = v.procesado_tn.trim() !== "" && !Number.isNaN(proc) && proc > 0;
   const enBolsas = (Number(v.bolsas_25 || 0) * 25 + Number(v.bolsas_50 || 0) * 50) / 1000;
-  const campo = "border border-gray-300 rounded px-2 py-1.5 text-sm w-full";
+  const campo = "border border-gray-300 rounded px-2 py-1.5 text-sm w-full bg-white";
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <label className="text-xs text-gray-600 col-span-2 sm:col-span-1">
           Salió procesado (tn)
@@ -252,13 +256,40 @@ export function CamposCierre({
             <span className="text-red-600">Salió más de lo que entró ({tn(entradaTn)} tn).</span>
           ) : (
             <>
-              Descarte: <b>{tn(entradaTn - proc, 3)} tn</b> · rinde <b>{tn((proc / entradaTn) * 100, 1)}%</b>
+              Descarte total: <b>{tn(descarte, 3)} tn</b> · rinde <b>{tn((proc / entradaTn) * 100, 1)}%</b>
             </>
           )
         ) : (
           <>Entraron {tn(entradaTn)} tn. Poné cuánto salió procesado y el descarte se calcula solo.</>
         )}
         {enBolsas > 0 && <span className="text-gray-400"> · las bolsas de 25 y 50 kg suman {tn(enBolsas, 3)} tn</span>}
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
+        <div className="text-xs font-semibold text-amber-800 mb-1.5">Cómo se reparte el descarte (tn)</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {TIPOS_DESCARTE.map((t) => (
+            <label key={t.campo} className="text-xs text-gray-700">
+              {t.nombre}
+              {"ayuda" in t && <span className="text-gray-400"> · {t.ayuda}</span>}
+              <input className={campo} inputMode="decimal" value={v[t.campo]} onChange={(e) => set({ ...v, [t.campo]: e.target.value })} placeholder="0" />
+            </label>
+          ))}
+          <div className="text-xs text-gray-700">
+            Volátil · lo que falta
+            <div className={`border rounded px-2 py-1.5 text-sm ${volatil < -0.0005 ? "border-red-300 text-red-600 bg-red-50" : "border-dashed border-gray-300 text-gray-600"}`}>
+              {valido && proc <= entradaTn ? `${tn(Math.max(volatil, 0), 3)} tn` : "—"}
+            </div>
+          </div>
+        </div>
+        {valido && volatil < -0.0005 && (
+          <p className="text-xs text-red-600 mt-1.5">
+            Los descartes suman {tn(tipos, 3)} tn y entre lo que entró y lo procesado hay {tn(descarte, 3)} tn.
+          </p>
+        )}
+        <p className="text-[11px] text-gray-500 mt-1.5">
+          Cada descarte queda en el stock de descarte con su tipo. La segundilla se puede volver a meter en un proceso. El volátil no va al stock.
+        </p>
       </div>
     </div>
   );
@@ -273,17 +304,16 @@ function FormCierre({
   onCancelar: () => void;
   onGuardar: (c: ValoresCierre) => Promise<{ ok: boolean; error?: string }>;
 }) {
-  const [v, setV] = useState<ValoresCierre>({ procesado_tn: "", bolsas_25: "", bolsas_50: "", big_bags: "", fecha_fin: hoyIso() });
+  const [v, setV] = useState<ValoresCierre>(cierreVacio());
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function guardar() {
-    const proc = Number(v.procesado_tn.replace(",", "."));
-    if (!v.procesado_tn || Number.isNaN(proc) || proc <= 0) return setError("Poné cuántas tn salieron procesadas.");
-    if (proc > entradaTn) return setError("Salió más de lo que entró.");
+    const e = errorCierre(v, entradaTn);
+    if (e) return setError(e);
     setGuardando(true);
     setError(null);
-    const r = await onGuardar({ ...v, procesado_tn: String(proc) });
+    const r = await onGuardar(cierreParaGuardar(v));
     setGuardando(false);
     if (!r.ok) setError(r.error ?? "No se pudo cerrar.");
   }

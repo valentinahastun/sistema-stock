@@ -4,7 +4,7 @@ import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import { type ProcesoVista } from "@/components/TarjetaProceso";
 import ProcesosPorPlanta from "@/components/ProcesosPorPlanta";
-import { tn } from "@/lib/procesos";
+import { tn, TIPOS_DESCARTE } from "@/lib/procesos";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export default async function ProcesosPage({
   let consulta = supabase
     .from("procesos")
     .select(
-      "id, numero, cv, estado, fecha_inicio, fecha_fin, entrada_tn, procesado_tn, descarte_tn, bolsas_25, bolsas_50, big_bags, historico, productores_texto, observaciones, planta_id, producto_id, plantas(nombre), productos(nombre), proceso_entradas(cantidad, lotes(proceso_id, productores(nombre)))"
+      "id, numero, cv, estado, fecha_inicio, fecha_fin, entrada_tn, procesado_tn, descarte_tn, bolsas_25, bolsas_50, big_bags, segundilla_tn, desc_electronica_tn, desc_vibradora_tn, desc_clasificadora_tn, desc_inutilizable_tn, volatil_tn, historico, productores_texto, observaciones, planta_id, producto_id, plantas(nombre), productos(nombre), proceso_entradas(cantidad, lotes(proceso_id, productores(nombre)))"
     )
     .order("fecha_inicio", { ascending: false })
     .limit(300);
@@ -74,6 +74,10 @@ export default async function ProcesosPage({
       bolsas_25: p.bolsas_25,
       bolsas_50: p.bolsas_50,
       big_bags: p.big_bags,
+      descartes: [
+        ...TIPOS_DESCARTE.map((t) => ({ nombre: t.nombre, tn: Number(p[t.campo] ?? 0) })),
+        { nombre: "Volátil", tn: Number(p.volatil_tn ?? 0) },
+      ].filter((d) => d.tn > 0),
       historico: p.historico,
       observaciones: p.observaciones,
       productores,
