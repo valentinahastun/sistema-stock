@@ -1,8 +1,11 @@
--- Bolsas de las CP cargadas el 3 al 11/11 (leídas de Observaciones de cada CP).
+-- Bolsas de las CP cargadas del 3 al 11/11 (leídas de Observaciones de cada CP).
 -- Se busca cada CP por número (y fecha +-7 días, porque cada emisor tiene su
 -- propia numeración). Al final muestra qué encontró para cada una.
 with datos(cp, fecha, b25, b50, bb) as (
   values
+    ('00000-00000089', date '2026-11-06', 1320, null, null), -- la CP dice 1240: estaban cruzadas con la 090
+    ('00000-00000090', date '2026-11-06', 1240, null, null), -- la CP dice 1320: estaban cruzadas con la 089
+    ('00000-00000243', date '2026-11-10', 1416, null, null), -- 16 bolsas de más (pesan un poco menos)
     ('00000-00000288', date '2026-11-11', 1123, null, null),
     ('00000-00000286', date '2026-11-11', 1165, null, null),
     ('00000-00000283', date '2026-11-10', 1160, null, null),
