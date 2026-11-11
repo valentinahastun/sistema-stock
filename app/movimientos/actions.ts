@@ -178,13 +178,25 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       .maybeSingle();
 
     const disponible = Number(stockFila?.stock_disponible_tn ?? 0);
-    if (cantidad > disponible) {
+    // Diferencia de balanza: si la CP supera el stock por hasta 200 kg, se
+    // carga igual descontando todo el stock (queda en 0) y se anota lo que
+    // dice la CP. Si lo supera por más, no se deja cargar.
+    let cantidadFinal = cantidad;
+    let obsFinal = observaciones;
+    const excesoKg = Math.round((cantidad - disponible) * 1000);
+    if (excesoKg > 200) {
       return {
         ok: false,
-        error: `No hay suficiente stock disponible en esa planta/producto (disponible: ${disponible.toFixed(
-          2
-        )} tn).`,
+        error: `No hay suficiente stock en esa planta/producto: hay ${disponible.toFixed(3)} tn y la CP supera el stock por ${excesoKg} kg (se aceptan hasta 200 kg de diferencia de balanza).`,
       };
+    }
+    if (excesoKg > 0) {
+      cantidadFinal = Math.round(disponible * 1000) / 1000;
+      if (cantidadFinal <= 0) {
+        return { ok: false, error: "No hay stock de ese producto en esa planta." };
+      }
+      const nota = `Según la CP salieron ${cantidad.toFixed(3)} tn: ${excesoKg} kg de diferencia de balanza, se descontó todo el stock (${cantidadFinal.toFixed(3)} tn).`;
+      obsFinal = observaciones ? `${observaciones} · ${nota}` : nota;
     }
 
     const { error } = await supabase.from("movimientos_stock").insert({
@@ -197,9 +209,9 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       chofer,
       patente,
       destino,
-      cantidad,
+      cantidad: cantidadFinal,
       fecha,
-      observaciones,
+      observaciones: obsFinal,
       cv,
       ...(controlo_carga ? { controlo_carga } : {}),
     });

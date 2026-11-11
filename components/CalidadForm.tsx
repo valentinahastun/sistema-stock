@@ -258,11 +258,12 @@ export default function CalidadForm({
               ))}
             </select>
           </Campo>
-          <Campo label="Número de contrato (si tuviera)">
+          <Campo label="CV / contrato (si tuviera)">
             <input
               name="numero_contrato"
               type="text"
               className="input"
+              placeholder="Ej.: 26-124"
               value={campos.numero_contrato}
               onChange={(e) => actualizar("numero_contrato", e.target.value)}
             />

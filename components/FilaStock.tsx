@@ -23,6 +23,7 @@ export type LoteDetalle = {
   de_proceso?: string | null; // número del proceso del que salió este lote
   a_proceso?: { proceso: string; tn: number }[]; // lo que entró de este lote a procesos
   tipo_descarte?: string | null; // segundilla, electrónica, ... (descarte que salió de un proceso)
+  calidades?: { id: string; fecha: string; por: "lote" | "cv" | "productor"; apto: boolean | null }[]; // análisis de calidad que aplican a este lote
 };
 
 export type FilaBase = {
@@ -386,7 +387,28 @@ function FilaLote({
     <tr className="border-t border-gray-200 align-top">
       <td className="px-2 py-1.5 whitespace-nowrap">{lote.fecha_ingreso}</td>
       <td className="px-2 py-1.5">{lote.productor}</td>
-      <td className="px-2 py-1.5">{lote.numero_cp ?? "—"}</td>
+      <td className="px-2 py-1.5">
+        {lote.numero_cp ?? "—"}
+        {lote.calidades?.map((c) => (
+          <a
+            key={c.id}
+            href={`/api/calidad/${c.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={
+              c.por === "lote"
+                ? "Análisis vinculado a este lote"
+                : c.por === "cv"
+                ? "Análisis cargado con el CV de este lote"
+                : "Análisis de este productor en esta planta y producto"
+            }
+            className="block text-[11px] text-brand-navy underline whitespace-nowrap"
+          >
+            📄 Calidad {(c.fecha ?? "").split("-").reverse().slice(0, 2).join("/")}
+            {c.apto === false ? " · no apto" : ""}
+          </a>
+        ))}
+      </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         {lote.cv ? (
           <span className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5">{lote.cv}</span>

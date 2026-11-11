@@ -173,6 +173,27 @@ export default function ProcesoForm({
     setProducto(id);
     setElegidos({});
   }
+  // Lotes naturales agrupados por productor, para marcar todas sus CP de una
+  const porProductor = useMemo(() => {
+    const g = new Map<string, LoteDisponible[]>();
+    candidatos
+      .filter((l) => l.estado === "natural" && !l.tipo_descarte)
+      .forEach((l) => g.set(l.productor, [...(g.get(l.productor) ?? []), l]));
+    return Array.from(g.entries())
+      .map(([productor, ls]) => ({ productor, lotes: ls, tn: ls.reduce((s, l) => s + l.stock_tn, 0) }))
+      .sort((a, b) => a.productor.localeCompare(b.productor));
+  }, [candidatos]);
+
+  function marcarProductor(ls: LoteDisponible[], si: boolean) {
+    const n = { ...elegidos };
+    ls.forEach((l) => {
+      if (si) n[l.lote_id] = String(Math.round(l.stock_tn * 1000) / 1000);
+      else delete n[l.lote_id];
+    });
+    setElegidos(n);
+    setError(null);
+  }
+
   function tildar(l: LoteDisponible, si: boolean) {
     const n = { ...elegidos };
     if (si) n[l.lote_id] = String(Math.round(l.stock_tn * 1000) / 1000);
@@ -279,6 +300,25 @@ export default function ProcesoForm({
           </label>
         </div>
 
+        {planta && producto && porProductor.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-gray-500">Marcar todas las CP de:</span>
+            {porProductor.map((g) => {
+              const todas = g.lotes.every((l) => elegidos[l.lote_id] !== undefined);
+              return (
+                <button
+                  key={g.productor}
+                  type="button"
+                  onClick={() => marcarProductor(g.lotes, !todas)}
+                  className={`rounded-full border px-2.5 py-1 ${todas ? "bg-brand-green text-white border-brand-green" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+                >
+                  {todas ? "✓ " : ""}
+                  {g.productor} · {g.lotes.length} CP · {tn(g.tn, 3)} tn
+                </button>
+              );
+            })}
+          </div>
+        )}
         {planta && producto && (
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             {candidatos.length === 0 && <p className="text-sm text-gray-400 p-3">No hay stock de ese producto en esa planta.</p>}

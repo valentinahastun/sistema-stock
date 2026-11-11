@@ -114,6 +114,9 @@ export type LoteConProductor = {
   tn: number;
 };
 type Nota = { tipo: "ok" | "aviso"; texto: string };
+// Diferencias de balanza aceptadas
+const TOLERANCIA_EGRESO_KG = 200; // egreso que supera el stock: se carga igual y deja el stock en 0
+const TOLERANCIA_INGRESO_KG = 100; // ingreso: diferencia entre kg cargados y descargados que dispara aviso
 type Pista = { nombre: string | null; de: string };
 type Contexto = {
   plantaId: string;
@@ -680,6 +683,33 @@ export default function MovimientoForm({
     );
   }
 
+  // Ingreso: diferencia entre los kg cargados (origen) y descargados (destino) de la CP
+  const kgCarga = datosCp?.pesoNetoCargaKg ?? null;
+  const kgDescarga = datosCp?.pesoNetoDescargaKg ?? null;
+  const difKg = kgCarga && kgDescarga ? kgCarga - kgDescarga : 0;
+  const avisoBalanzaIngreso =
+    tipo === "ingreso" && Math.abs(difKg) > TOLERANCIA_INGRESO_KG
+      ? `La CP dice ${kgCarga!.toLocaleString("es-AR")} kg cargados y ${kgDescarga!.toLocaleString("es-AR")} kg descargados: llegaron ${Math.abs(difKg).toLocaleString("es-AR")} kg ${difKg > 0 ? "menos" : "más"}. Revisalo.`
+      : null;
+
+  // Egreso: si sale un poco más de lo que hay (diferencia de balanza) se deja
+  // cargar y se descuenta todo el stock; si es mucho más, no.
+  const disponiblePlanta = stock.find((x) => x.planta_id === plantaId && x.producto_id === productoId)?.tn ?? null;
+  const tnEgreso = Number(cantidad);
+  const excesoKg = disponiblePlanta !== null && tnEgreso > 0 ? Math.round((tnEgreso - disponiblePlanta) * 1000) : 0;
+  const avisoStockEgreso: { tipo: "aviso" | "error"; texto: string } | null =
+    tipo !== "egreso" || excesoKg <= 0
+      ? null
+      : excesoKg <= TOLERANCIA_EGRESO_KG
+      ? {
+          tipo: "aviso",
+          texto: `En stock hay ${fmtTn(disponiblePlanta!)} tn y la CP dice ${fmtTn(tnEgreso)} tn: ${excesoKg} kg de diferencia de balanza. Se puede cargar: se descuenta todo el stock y queda en 0.`,
+        }
+      : {
+          tipo: "error",
+          texto: `En stock hay ${fmtTn(disponiblePlanta!)} tn: la CP supera el stock por ${excesoKg.toLocaleString("es-AR")} kg (más de ${TOLERANCIA_EGRESO_KG} kg). Revisá la planta, el producto o los ingresos.`,
+        };
+
   async function handleSubmit(formData: FormData) {
     setEnviando(true);
     setMensaje(null);
@@ -887,6 +917,9 @@ export default function MovimientoForm({
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
               />
+              {avisoBalanzaIngreso && (
+                <p className="text-xs mt-1 text-amber-700">{avisoBalanzaIngreso}</p>
+              )}
             </Campo>
 
             <Campo label="Fecha">
@@ -1063,6 +1096,11 @@ export default function MovimientoForm({
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
               />
+              {avisoStockEgreso && (
+                <p className={`text-xs mt-1 ${avisoStockEgreso.tipo === "error" ? "text-red-600" : "text-amber-700"}`}>
+                  {avisoStockEgreso.texto}
+                </p>
+              )}
             </Campo>
 
             <Campo label="Fecha">

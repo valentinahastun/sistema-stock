@@ -4,6 +4,7 @@ import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import StockAgrupado, { type LoteDetalle, type FilaBase } from "@/components/FilaStock";
 import { repartirEgresos } from "@/lib/repartoEgresos";
+import { normalizarCv } from "@/lib/cv";
 
 export default async function StockPage({
   searchParams,
@@ -14,7 +15,7 @@ export default async function StockPage({
   const perfil = await getPerfilActual();
   const puedeEditar = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }, { data: bolsas }, { data: egresos }, { data: aProceso }, { data: enProceso }] =
+  const [{ data: plantas }, { data: productos }, { data: stock }, { data: comprometido }, { data: lotes }, { data: descartes }, { data: bolsas }, { data: egresos }, { data: aProceso }, { data: enProceso }, { data: calidades }] =
     await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -36,6 +37,10 @@ export default async function StockPage({
         .select("id, numero, entrada_tn, fecha_inicio, planta_id, producto_id, plantas(nombre), productos(nombre)")
         .eq("estado", "en_proceso")
         .order("fecha_inicio"),
+      supabase
+        .from("registros_calidad")
+        .select("id, fecha, apto, lote_id, planta_id, producto_id, numero_contrato, productores(nombre)")
+        .order("fecha", { ascending: false }),
     ]);
 
   const numeroDe = (rel: any) => (Array.isArray(rel) ? rel[0]?.numero : rel?.numero) ?? "sin número";
@@ -84,6 +89,35 @@ export default async function StockPage({
     });
     lotesPorClave.set(clave, lista);
   });
+
+  // Calidad de cada lote: el análisis vinculado al lote, los cargados con el
+  // CV del lote y los (sin vincular) del mismo productor en esa planta/producto.
+  const calidadesSueltas = (calidades ?? []).map((c: any) => ({
+    id: c.id as string,
+    fecha: c.fecha as string,
+    apto: c.apto as boolean | null,
+    lote_id: c.lote_id as string | null,
+    clave: `${c.planta_id}-${c.producto_id}`,
+    cv: normalizarCv(c.numero_contrato),
+    productor: (Array.isArray(c.productores) ? c.productores[0]?.nombre : c.productores?.nombre) ?? null,
+  }));
+  lotesPorClave.forEach((lista, clave) =>
+    lista.forEach((l) => {
+      const vistas = new Set<string>();
+      const res: NonNullable<LoteDetalle["calidades"]> = [];
+      const sumar = (c: (typeof calidadesSueltas)[number], por: "lote" | "cv" | "productor") => {
+        if (vistas.has(c.id)) return;
+        vistas.add(c.id);
+        res.push({ id: c.id, fecha: c.fecha, apto: c.apto, por });
+      };
+      calidadesSueltas.filter((c) => c.lote_id === l.lote_id).forEach((c) => sumar(c, "lote"));
+      if (l.cv) calidadesSueltas.filter((c) => c.cv && c.cv === l.cv).forEach((c) => sumar(c, "cv"));
+      calidadesSueltas
+        .filter((c) => !c.lote_id && c.clave === clave && c.productor && c.productor === l.productor)
+        .forEach((c) => sumar(c, "productor"));
+      if (res.length) l.calidades = res.slice(0, 3);
+    })
+  );
 
   // Salidas (egresos) repartidas entre los lotes: ver lib/repartoEgresos.ts
   repartirEgresos(
