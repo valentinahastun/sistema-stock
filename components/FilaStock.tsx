@@ -20,6 +20,7 @@ export type LoteDetalle = {
   cv?: string | null; // CV al que está comprometido el lote
   salidas_tn?: number; // egresos (por planta/producto) que se descuentan de este lote
   salidas?: { cv: string | null; tn: number }[]; // a qué CV salió y cuánto
+  bolsas_salidas?: { b25: number; b50: number; bb: number }; // bolsas que salieron en egresos (repartidas por tn)
   de_proceso?: string | null; // número del proceso del que salió este lote
   a_proceso?: { proceso: string; tn: number }[]; // lo que entró de este lote a procesos
   tipo_descarte?: string | null; // segundilla, electrónica, ... (descarte que salió de un proceso)
@@ -539,6 +540,24 @@ function CeldaBolsas({ lote, puedeEditar }: { lote: LoteDetalle; puedeEditar: bo
     lote.bolsas_50 ? `${lote.bolsas_50.toLocaleString("es-AR")} × 50 kg` : null,
     lote.big_bags ? `${lote.big_bags.toLocaleString("es-AR")} big bag${lote.big_bags === 1 ? "" : "s"}` : null,
   ].filter(Boolean);
+  // Bolsas que salieron en egresos y las que quedan
+  const sal = lote.bolsas_salidas;
+  const r = (n: number) => Math.round(n);
+  const salieron = sal
+    ? [
+        r(sal.b25) ? `${r(sal.b25).toLocaleString("es-AR")} × 25` : null,
+        r(sal.b50) ? `${r(sal.b50).toLocaleString("es-AR")} × 50` : null,
+        r(sal.bb) ? `${r(sal.bb).toLocaleString("es-AR")} big bags` : null,
+      ].filter(Boolean)
+    : [];
+  const quedan =
+    sal && partes.length
+      ? [
+          lote.bolsas_25 ? `${Math.max(0, lote.bolsas_25 - r(sal.b25)).toLocaleString("es-AR")} × 25 kg` : null,
+          lote.bolsas_50 ? `${Math.max(0, lote.bolsas_50 - r(sal.b50)).toLocaleString("es-AR")} × 50 kg` : null,
+          lote.big_bags ? `${Math.max(0, lote.big_bags - r(sal.bb)).toLocaleString("es-AR")} big bags` : null,
+        ].filter(Boolean)
+      : [];
 
   async function guardar() {
     const num = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -556,7 +575,22 @@ function CeldaBolsas({ lote, puedeEditar }: { lote: LoteDetalle; puedeEditar: bo
   if (!editando) {
     return (
       <div className="flex items-center gap-2">
-        <span className={partes.length ? "" : "text-gray-400"}>{partes.length ? partes.join(" · ") : "Sin cargar"}</span>
+        <span className={partes.length ? "" : "text-gray-400"}>
+          {quedan.length ? (
+            <>
+              <span className="font-medium">quedan {quedan.join(" · ")}</span>
+              <span className="block text-[10px] text-gray-400 whitespace-nowrap">
+                tenía {partes.join(" · ")}, salieron {salieron.join(" · ")}
+              </span>
+            </>
+          ) : partes.length ? (
+            partes.join(" · ")
+          ) : salieron.length ? (
+            <span className="text-gray-500 whitespace-nowrap">salieron {salieron.join(" · ")} bls</span>
+          ) : (
+            "Sin cargar"
+          )}
+        </span>
         {puedeEditar && (
           <button type="button" onClick={() => setEditando(true)} className="text-brand-green hover:underline text-[11px]">
             {partes.length ? "Editar" : "Cargar"}

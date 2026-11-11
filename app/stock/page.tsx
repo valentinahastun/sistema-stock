@@ -29,7 +29,7 @@ export default async function StockPage({
         .order("fecha_ingreso", { ascending: false }),
       supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
       supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags, tipo_descarte, proceso_id, procesos!lotes_proceso_id_fkey(numero)"),
-      supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv, productores(nombre)").eq("tipo", "egreso").is("lote_id", null),
+      supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv, bolsas_25, bolsas_50, big_bags, productores(nombre)").eq("tipo", "egreso").is("lote_id", null),
       // Lo que entró de cada lote a un proceso
       supabase.from("proceso_entradas").select("lote_id, cantidad, procesos(numero)"),
       supabase
@@ -128,6 +128,9 @@ export default async function StockPage({
       cantidad: Number(e.cantidad),
       cv: e.cv ?? null,
       productor: (Array.isArray(e.productores) ? e.productores[0]?.nombre : e.productores?.nombre) ?? null,
+      bolsas_25: e.bolsas_25,
+      bolsas_50: e.bolsas_50,
+      big_bags: e.big_bags,
     }))
   );
 
