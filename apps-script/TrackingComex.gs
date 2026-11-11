@@ -859,7 +859,8 @@ const DRAFTS_DRIVE = [
 
 // Archivos sueltos en la carpeta de la operación (o del lote)
 const RAIZ_DRIVE = [
-  { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|sps[\s_-]*ic/i, paso: 'ip' },
+  // IP: por nombre, o el PDF que baja el sistema de Filipinas (BPI / NSW) con nombre de código: 2264b5…_8018…_m.pdf
+  { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|import\s*clearance|sps[\s_-]*ic|^[0-9a-f]{32}_\d+_m\.pdf$/i, paso: 'ip' },
   { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
   { re: /^ofic_/i, paso: 'pe' },            // PE oficializado
   { re: /^cpe-/i, paso: 'camiones' },       // carta de porte electrónica
