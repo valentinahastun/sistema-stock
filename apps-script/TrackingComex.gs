@@ -508,6 +508,8 @@ function leerMails() {
     // Proforma / datos del PE que mandan a Reymar, y la DDEE (Reymar la manda, se reenvía al cliente y se aprueba)
     equipo + ' to:reymar.com.ar {subject:proforma subject:PE} ' + despues,
     'DDEE ' + despues,
+    // IP / permiso de importación que manda el cliente o el broker ("Adjunto IP", "SPS Import Clearance")
+    '-from:argreen.com.ar has:attachment {"adjunto IP" "adjunto el IP" "adjunto la IP" "adjuntamos IP" "attached IP" "IP attached" "import permit" "import clearance" "SPS IC"} ' + despues,
   ];
   const vistos = {};
   const hilos = [];
@@ -646,6 +648,11 @@ function analizarMensajes(msgs) {
       add(m, 'ddee_aprobada', cvMail, !!cvMail, cvMail ? 'DDEE aprobada (' + m.de + ')' : 'DDEE aprobada sin CV en el asunto');
     }
 
+    // 11: el cliente o broker manda el IP ("Adjunto IP", "Please find attached the import permit")
+    if (!delEquipo(m) && IP_ADJUNTO.test(tx)) {
+      add(m, 'ip', cvMail, !!cvMail, cvMail ? 'IP recibido (' + m.de + ')' : 'IP recibido sin CV en el asunto');
+    }
+
     // 2 y 3: hilo de Reymar "DRAFT - AG nnn"
     const ag = cvDeAg(asunto, m.fecha);
     if (ag) {
@@ -734,6 +741,9 @@ function analizarMensajes(msgs) {
   items.forEach(i => { if (!unicos[i.id]) unicos[i.id] = i; });
   return Object.keys(unicos).map(k => unicos[k]);
 }
+
+// "Adjunto IP", "adjuntamos el IP", "attached the import permit", "IP adjunto", "SPS Import Clearance"
+const IP_ADJUNTO = /\b(adjunto|adjunta|adjuntamos|envio|enviamos|attached|attaching|attach|find)\b[^.\n]{0,25}\b(el\s+|la\s+|the\s+)?(ip|import\s+permit|import\s+clearance|sps[\s-]*ic)\b|\b(ip|import\s+permit)\s+(adjunto|attached)\b/i;
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
 const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documento?s|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
