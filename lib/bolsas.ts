@@ -21,9 +21,11 @@ export function leerBolsas(texto: string | null | undefined, pesoNetoKg: number 
   let bb = 0;
   let sinTamano = 0;
 
+  // "bolsones de 25 kg" son bolsas de 25 (no big bags)
+  const t2 = t.replace(/bols[oó]n(?:es)?(?=\s*(?:x|de|por|\()?\s*(?:25|50)\s*(?:kgs?|k)?\b)/gi, "bolsas");
   // Big bags / bolsones primero (para que "bags" no se cuente como bolsa)
   const reBb = /(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(?:big\s*-?\s*bags?|bigbags?|b\.?\s?b\.?(?=\W|$)|bols[oó]n(?:es)?)/gi;
-  let resto = t.replace(reBb, (_m, n) => {
+  const resto = t2.replace(reBb, (_m, n) => {
     bb += aEntero(n);
     return " ";
   });
