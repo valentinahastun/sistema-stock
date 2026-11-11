@@ -1,8 +1,10 @@
 import Link from "next/link";
+import type { CalidadCv } from "@/lib/calidadOperaciones";
+import { ChipCalidad } from "@/components/CalidadOperacion";
 import { type Alerta, type Operacion, type EstadoEtapa, ETAPAS, fecha, nombreOperacion, NOMBRE_RESPONSABLE } from "@/lib/pasos";
 
 type E = { codigo: string; nombre: string; icono: string; estado: EstadoEtapa; total: number; listos: number };
-export type FilaOperacion = { o: Operacion; et: E[]; ahora: string; al: Alerta[] };
+export type FilaOperacion = { o: Operacion; et: E[]; ahora: string; al: Alerta[]; calidad?: CalidadCv[] };
 
 // Nombres cortos para el encabezado de la tabla
 const CORTO: Record<string, string> = {
@@ -16,7 +18,7 @@ const CORTO: Record<string, string> = {
 
 // Una fila por operación, una columna por etapa: se lee de un vistazo
 // en qué etapa está cada una y qué falta.
-export default function TablaOperaciones({ filas }: { filas: FilaOperacion[] }) {
+export default function TablaOperaciones({ filas }: { filas: (FilaOperacion & { calidad?: CalidadCv[] })[] }) {
   if (!filas.length) {
     return <p className="text-slate-400 text-sm text-center py-8">No hay operaciones para este filtro.</p>;
   }
@@ -36,7 +38,7 @@ export default function TablaOperaciones({ filas }: { filas: FilaOperacion[] }) 
           </tr>
         </thead>
         <tbody>
-          {filas.map(({ o, et, ahora, al }) => {
+          {filas.map(({ o, et, ahora, al, calidad }) => {
             const vencida = al.find((a) => a.nivel === "vencida");
             const proxima = al.find((a) => a.nivel === "proxima");
             const href = `/operaciones/${encodeURIComponent(o.clave)}`;
@@ -46,6 +48,7 @@ export default function TablaOperaciones({ filas }: { filas: FilaOperacion[] }) 
                   <Link href={href} className="block">
                     <span className="flex items-center gap-2">
                       <span className="font-medium text-slate-800 hover:text-sky-700">{nombreOperacion(o)}</span>
+                      <ChipCalidad analisis={calidad} />
                       {o.responsable && (
                         <span
                           className={

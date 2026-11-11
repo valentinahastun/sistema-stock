@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { calidadPorCv, cvDeOperacion } from "@/lib/calidadOperaciones";
 import { createClient } from "@/lib/supabase/server";
 import { getUsuario } from "@/lib/usuario";
 import SinAcceso from "@/components/SinAcceso";
@@ -29,10 +30,11 @@ export default async function Operaciones({
   const etapaSel = searchParams.etapa ?? "";
   const supabase = createClient();
 
-  const [{ data: ops }, { data: hitos }, { data: alertas }] = await Promise.all([
+  const [{ data: ops }, { data: hitos }, { data: alertas }, calidad] = await Promise.all([
     supabase.from("op_operaciones").select("*").eq("activa", true).order("clave"),
     supabase.from("op_hitos").select("clave, paso, fecha, fuente, detalle, mail_url, updated_by"),
     supabase.rpc("op_alertas"),
+    calidadPorCv(),
   ]);
 
   const porOp = new Map<string, Map<string, Hito>>();
@@ -58,7 +60,7 @@ export default async function Operaciones({
     const et = etapas(o, h);
     const actual = et.find((e) => e.estado === "actual");
     const al = alertasPorOp.get(o.clave) ?? [];
-    return { o, et, etapaActual: actual?.codigo ?? "terminada", ahora: enPalabras(o, h), al };
+    return { o, et, etapaActual: actual?.codigo ?? "terminada", ahora: enPalabras(o, h), al, calidad: calidad.get(cvDeOperacion(o) ?? "") };
   });
 
   // Cuántas hay en cada etapa (para los recuadros de arriba)

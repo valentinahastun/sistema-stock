@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { calidadPorCv, cvDeOperacion } from "@/lib/calidadOperaciones";
+import { RecuadroCalidad } from "@/components/CalidadOperacion";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUsuario } from "@/lib/usuario";
@@ -37,10 +39,11 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
 
   const clave = decodeURIComponent(params.clave);
   const supabase = createClient();
-  const [{ data: op }, { data: hitosData }, { data: alertasData }] = await Promise.all([
+  const [{ data: op }, { data: hitosData }, { data: alertasData }, calidad] = await Promise.all([
     supabase.from("op_operaciones").select("*").eq("clave", clave).maybeSingle(),
     supabase.from("op_hitos").select("*").eq("clave", clave),
     supabase.rpc("op_alertas"),
+    calidadPorCv(),
   ]);
   if (!op) notFound();
   const o = op as Operacion;
@@ -122,6 +125,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
           <Dato t="ETA" v={fecha(o.eta, true)} />
           <Dato t="Contenedores" v={o.contenedores} wide />
         </dl>
+        <RecuadroCalidad analisis={calidad.get(cvDeOperacion(o) ?? "")} />
         {puedeEditar && (
           <OpcionesOperacion
             clave={o.clave}
