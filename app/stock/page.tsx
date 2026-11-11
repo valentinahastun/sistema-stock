@@ -91,7 +91,8 @@ export default async function StockPage({
   });
 
   // Calidad de cada lote: el análisis vinculado al lote, los cargados con el
-  // CV del lote y los (sin vincular) del mismo productor en esa planta/producto.
+  // CV del lote y los (sin vincular y sin CV) del mismo productor en esa
+  // planta/producto.
   const calidadesSueltas = (calidades ?? []).map((c: any) => ({
     id: c.id as string,
     fecha: c.fecha as string,
@@ -113,7 +114,8 @@ export default async function StockPage({
       calidadesSueltas.filter((c) => c.lote_id === l.lote_id).forEach((c) => sumar(c, "lote"));
       if (l.cv) calidadesSueltas.filter((c) => c.cv && c.cv === l.cv).forEach((c) => sumar(c, "cv"));
       calidadesSueltas
-        .filter((c) => !c.lote_id && c.clave === clave && c.productor && c.productor === l.productor)
+        // Por productor solo los análisis sin CV: uno con CV va únicamente a los lotes de ese CV
+        .filter((c) => !c.lote_id && !c.cv && c.clave === clave && c.productor && c.productor === l.productor)
         .forEach((c) => sumar(c, "productor"));
       if (res.length) l.calidades = res.slice(0, 3);
     })
