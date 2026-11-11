@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { crearIngreso, crearMovimientoDirecto, crearEgreso, buscarCpCargada, type CpCargada } from "@/app/movimientos/actions";
 import { crearDesdeCp } from "@/app/catalogos/actions";
 import { normalizarCv } from "@/lib/cv";
+import { leerBolsas } from "@/lib/bolsas";
 
 type Catalogo = { id: string; nombre: string };
 
@@ -23,6 +24,7 @@ type DatosCp = {
   destino: string | null;
   destinoNombre?: string | null;
   granoTipo: string | null;
+  observaciones?: string | null;
 };
 
 type Tipo = "ingreso" | "egreso" | "directo";
@@ -280,6 +282,9 @@ export default function MovimientoForm({
   const [patente, setPatente] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [cantidadDescargada, setCantidadDescargada] = useState("");
+  // Bolsas (se leen de "Observaciones" de la CP)
+  const [bolsas, setBolsas] = useState({ b25: "", b50: "", bb: "" });
+  const [notaBolsas, setNotaBolsas] = useState<{ tipo: "ok" | "aviso"; texto: string } | null>(null);
   const [fecha, setFecha] = useState(hoy);
   const [destino, setDestino] = useState("");
   const [titular, setTitular] = useState("");
@@ -320,6 +325,8 @@ export default function MovimientoForm({
     setPatente("");
     setCantidad("");
     setCantidadDescargada("");
+    setBolsas({ b25: "", b50: "", bb: "" });
+    setNotaBolsas(null);
     setFecha(hoy);
     setDestino("");
     setTitular("");
@@ -342,6 +349,20 @@ export default function MovimientoForm({
   // el peso, la fecha y el resto dependen del tipo, así que hay que
   // recalcularlos.
   function aplicarDatosCp(datos: DatosCp, tipoActual: Tipo) {
+    {
+      const neto = tipoActual === "ingreso" ? datos.pesoNetoDescargaKg ?? datos.pesoNetoCargaKg : datos.pesoNetoCargaKg;
+      const lb = leerBolsas(datos.observaciones, neto);
+      setBolsas({ b25: lb.bolsas_25 ? String(lb.bolsas_25) : "", b50: lb.bolsas_50 ? String(lb.bolsas_50) : "", bb: lb.big_bags ? String(lb.big_bags) : "" });
+      setNotaBolsas(
+        lb.aviso
+          ? { tipo: "aviso", texto: lb.aviso }
+          : lb.leido
+          ? { tipo: "ok", texto: `Leído de las observaciones de la CP${lb.detalle ? `: ${lb.detalle}` : ""}. Revisalo.` }
+          : datos.observaciones
+          ? { tipo: "aviso", texto: `No encontré bolsas en las observaciones ("${datos.observaciones}"). Si salió embolsado, completalo a mano.` }
+          : null
+      );
+    }
     const faltantes: string[] = [];
 
     // El producto se intenta asociar leyendo el grano/tipo de poroto de la
@@ -921,6 +942,16 @@ export default function MovimientoForm({
                 <p className="text-xs mt-1 text-amber-700">{avisoBalanzaIngreso}</p>
               )}
             </Campo>
+            <Campo label="Bolsas (si va embolsado)">
+              <div className="grid grid-cols-3 gap-2">
+                <input name="bolsas_25" type="number" min="0" step="1" className="input" placeholder="de 25 kg" value={bolsas.b25} onChange={(e) => setBolsas({ ...bolsas, b25: e.target.value })} />
+                <input name="bolsas_50" type="number" min="0" step="1" className="input" placeholder="de 50 kg" value={bolsas.b50} onChange={(e) => setBolsas({ ...bolsas, b50: e.target.value })} />
+                <input name="big_bags" type="number" min="0" step="1" className="input" placeholder="big bags" value={bolsas.bb} onChange={(e) => setBolsas({ ...bolsas, bb: e.target.value })} />
+              </div>
+              {notaBolsas && (
+                <p className={`text-xs mt-1 ${notaBolsas.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>{notaBolsas.texto}</p>
+              )}
+            </Campo>
 
             <Campo label="Fecha">
               <input
@@ -1102,6 +1133,16 @@ export default function MovimientoForm({
                 </p>
               )}
             </Campo>
+            <Campo label="Bolsas (si va embolsado)">
+              <div className="grid grid-cols-3 gap-2">
+                <input name="bolsas_25" type="number" min="0" step="1" className="input" placeholder="de 25 kg" value={bolsas.b25} onChange={(e) => setBolsas({ ...bolsas, b25: e.target.value })} />
+                <input name="bolsas_50" type="number" min="0" step="1" className="input" placeholder="de 50 kg" value={bolsas.b50} onChange={(e) => setBolsas({ ...bolsas, b50: e.target.value })} />
+                <input name="big_bags" type="number" min="0" step="1" className="input" placeholder="big bags" value={bolsas.bb} onChange={(e) => setBolsas({ ...bolsas, bb: e.target.value })} />
+              </div>
+              {notaBolsas && (
+                <p className={`text-xs mt-1 ${notaBolsas.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>{notaBolsas.texto}</p>
+              )}
+            </Campo>
 
             <Campo label="Fecha">
               <input
@@ -1235,6 +1276,16 @@ export default function MovimientoForm({
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
               />
+            </Campo>
+            <Campo label="Bolsas (si va embolsado)">
+              <div className="grid grid-cols-3 gap-2">
+                <input name="bolsas_25" type="number" min="0" step="1" className="input" placeholder="de 25 kg" value={bolsas.b25} onChange={(e) => setBolsas({ ...bolsas, b25: e.target.value })} />
+                <input name="bolsas_50" type="number" min="0" step="1" className="input" placeholder="de 50 kg" value={bolsas.b50} onChange={(e) => setBolsas({ ...bolsas, b50: e.target.value })} />
+                <input name="big_bags" type="number" min="0" step="1" className="input" placeholder="big bags" value={bolsas.bb} onChange={(e) => setBolsas({ ...bolsas, bb: e.target.value })} />
+              </div>
+              {notaBolsas && (
+                <p className={`text-xs mt-1 ${notaBolsas.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>{notaBolsas.texto}</p>
+              )}
             </Campo>
 
             <Campo label="Cantidad descargada (toneladas, opcional)">

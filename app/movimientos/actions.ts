@@ -16,6 +16,15 @@ async function verificarAdmin() {
 }
 
 // Alta de un lote nuevo + su movimiento de ingreso.
+// Bolsas del formulario (vacío = null)
+function bolsasDe(formData: FormData) {
+  const n = (k: string) => {
+    const v = Number(formData.get(k));
+    return Number.isFinite(v) && v > 0 ? Math.round(v) : null;
+  };
+  return { bolsas_25: n("bolsas_25"), bolsas_50: n("bolsas_50"), big_bags: n("big_bags") };
+}
+
 export async function crearIngreso(formData: FormData): Promise<Resultado> {
   try {
     await verificarAdmin();
@@ -51,6 +60,7 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
         patente,
         fecha_ingreso,
         cantidad_ingresada: cantidad,
+        ...bolsasDe(formData),
       })
       .select("id")
       .single();
@@ -121,6 +131,7 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
       destino,
       cantidad,
       cantidad_descargada,
+      ...bolsasDe(formData),
       fecha,
       observaciones,
       ...(controlo_carga ? { controlo_carga } : {}),
@@ -213,6 +224,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       fecha,
       observaciones: obsFinal,
       cv,
+      ...bolsasDe(formData),
       ...(controlo_carga ? { controlo_carga } : {}),
     });
 

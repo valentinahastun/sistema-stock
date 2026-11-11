@@ -52,6 +52,7 @@ export type CpParseada = {
   destino: string | null; // Destino (sección A) + localidad/provincia (sección D), a modo de registro
   destinoNombre: string | null; // solo el nombre del Destino (sección A), sin CUIT ni localidad
   granoTipo: string | null; // "Grano / especie" + "Tipo" tal cual figuran en la CP (sección B)
+  observaciones: string | null; // texto libre de "Observaciones" (ahí se anotan las bolsas)
 };
 
 // Devuelve lo que sigue a una etiqueta en una línea, cortando si aparece
@@ -224,7 +225,18 @@ export function parseCp(lineas: string[]): CpParseada {
   const pesoNetoCargaKg = pesoNeto(seccionB);
   const pesoNetoDescargaKg = pesoNeto(seccionG);
 
+  // Observaciones (sección B): texto libre, a veces sigue en el renglón de abajo
+  let observaciones: string | null = null;
+  const iObs = seccionB.findIndex((l) => /Observaciones\s*:/i.test(l));
+  if (iObs >= 0) {
+    const partes = [valorTrasEtiqueta(seccionB[iObs], /Observaciones\s*:/i, [/Peso (?:Bruto|Tara|Neto)/i])];
+    const sig = seccionB[iObs + 1];
+    if (sig && !/:/.test(sig) && !/^[A-H]\s*-\s/.test(sig)) partes.push(sig);
+    observaciones = partes.filter(Boolean).join(" ").trim() || null;
+  }
+
   return {
+    observaciones,
     numeroCpe: numeroCpeMatch ? numeroCpeMatch[1] : null,
     ctg: ctgMatch ? ctgMatch[1] : null,
     chofer,

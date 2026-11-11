@@ -27,7 +27,7 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, cv, controlo_carga, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, cantidad, fecha, motivo, observaciones, cv, controlo_carga, bolsas_25, bolsas_50, big_bags, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
       )
       .eq("tipo", "egreso")
       .is("proceso_id", null)
@@ -45,6 +45,9 @@ export default async function EgresosPage({
     observaciones: string | null;
     cv: string | null;
     controlo_carga: string | null;
+    bolsas_25: number | null;
+    bolsas_50: number | null;
+    big_bags: number | null;
     numero_cp: string | null;
     transportista: string | null;
     chofer: string | null;
@@ -96,6 +99,29 @@ export default async function EgresosPage({
   }
 
   const totalTn = filas.reduce((acc, f) => acc + Number(f.cantidad), 0);
+
+  const textoBolsas = (f: Fila) =>
+    [
+      f.bolsas_25 ? `${f.bolsas_25.toLocaleString("es-AR")} bls 25 kg` : null,
+      f.bolsas_50 ? `${f.bolsas_50.toLocaleString("es-AR")} bls 50 kg` : null,
+      f.big_bags ? `${f.big_bags.toLocaleString("es-AR")} big bags` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  // Totales por CV (toneladas y bolsas)
+  const mapaCv = new Map<string, { cv: string; camiones: number; tn: number; b25: number; b50: number; bb: number }>();
+  filas.forEach((f) => {
+    if (!f.cv) return;
+    const c = mapaCv.get(f.cv) ?? { cv: f.cv, camiones: 0, tn: 0, b25: 0, b50: 0, bb: 0 };
+    c.camiones += 1;
+    c.tn += Number(f.cantidad);
+    c.b25 += f.bolsas_25 ?? 0;
+    c.b50 += f.bolsas_50 ?? 0;
+    c.bb += f.big_bags ?? 0;
+    mapaCv.set(f.cv, c);
+  });
+  const porCv = Array.from(mapaCv.values()).sort((a, b) => b.cv.localeCompare(a.cv));
 
   return (
     <div>
@@ -168,6 +194,7 @@ export default async function EgresosPage({
                   </td>
                   <td className="px-4 py-2 text-right font-medium">
                     {Number(f.cantidad).toFixed(2)}
+                    {textoBolsas(f) && <div className="text-[11px] font-normal text-gray-500 whitespace-nowrap">{textoBolsas(f)}</div>}
                   </td>
                   <td className="px-4 py-2">{f.motivo ?? "—"}</td>
                   <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
@@ -197,6 +224,39 @@ export default async function EgresosPage({
       <p className="text-xs text-gray-400 mt-1">
         El destino / motivo y las observaciones son el texto que se escribió al cargar el egreso.
       </p>
+
+      {porCv.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-brand-navy mb-2">Bolsas por CV</h2>
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b bg-brand-green-light">
+                  <th className="px-4 py-2">CV</th>
+                  <th className="px-4 py-2 text-right">Camiones</th>
+                  <th className="px-4 py-2 text-right">Toneladas</th>
+                  <th className="px-4 py-2 text-right">Bolsas 25 kg</th>
+                  <th className="px-4 py-2 text-right">Bolsas 50 kg</th>
+                  <th className="px-4 py-2 text-right">Big bags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porCv.map((c) => (
+                  <tr key={c.cv} className="border-b last:border-0">
+                    <td className="px-4 py-2">{c.cv}</td>
+                    <td className="px-4 py-2 text-right">{c.camiones}</td>
+                    <td className="px-4 py-2 text-right">{c.tn.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">{c.b25 ? c.b25.toLocaleString("es-AR") : "—"}</td>
+                    <td className="px-4 py-2 text-right">{c.b50 ? c.b50.toLocaleString("es-AR") : "—"}</td>
+                    <td className="px-4 py-2 text-right">{c.bb ? c.bb.toLocaleString("es-AR") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Según los egresos de este filtro que tienen CV.</p>
+        </div>
+      )}
     </div>
   );
 }
