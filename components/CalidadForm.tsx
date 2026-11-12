@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { guardarCalidad } from "@/app/calidad/actions";
 import CoccionCampos, { coccionVacia, type ValoresCoccion } from "@/components/CoccionCampos";
+import { normalizarCv } from "@/lib/cv";
 
 // Se mantiene exportado por compatibilidad con quien importe el tipo,
 // aunque el formulario ya no elige lote: toda carga de calidad queda
@@ -88,14 +89,19 @@ function borradorVacio(hoy: string): Borrador {
   };
 }
 
+export type LoteCv = { cv: string; planta_id: string; producto_id: string; productor_id: string | null };
+
 export default function CalidadForm({
   plantas,
   productos,
   productores,
+  lotesCv = [],
 }: {
   plantas: OpcionCatalogo[];
   productos: OpcionCatalogo[];
   productores: OpcionCatalogo[];
+  // Lotes con stock que tienen CV: para completar planta/producto/productor al poner el CV
+  lotesCv?: LoteCv[];
 }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [campos, setCampos] = useState<Borrador>(() => borradorVacio(hoy));
@@ -143,6 +149,42 @@ export default function CalidadForm({
 
   function actualizar<K extends keyof Borrador>(campo: K, valor: Borrador[K]) {
     setCampos((prev) => ({ ...prev, [campo]: valor }));
+  }
+
+  // Al poner el CV (y el producto, si ya está), se completa dónde está esa
+  // mercadería según el stock: planta, producto y productor, si son únicos.
+  const [notaCv, setNotaCv] = useState<{ tipo: "ok" | "aviso"; texto: string } | null>(null);
+  function completarPorCv(cvTexto: string, productoId: string) {
+    const cv = normalizarCv(cvTexto);
+    if (!cv) {
+      setNotaCv(null);
+      return;
+    }
+    const delCv = lotesCv.filter((l) => l.cv === cv && (!productoId || l.producto_id === productoId));
+    if (!delCv.length) {
+      setNotaCv({ tipo: "aviso", texto: `No encontré mercadería del ${cv}${productoId ? " de este producto" : ""} en el stock. Completá la planta a mano.` });
+      return;
+    }
+    const unico = (k: keyof LoteCv) => {
+      const vs = Array.from(new Set(delCv.map((l) => l[k]).filter(Boolean))) as string[];
+      return vs.length === 1 ? vs[0] : null;
+    };
+    const planta = unico("planta_id");
+    const producto = unico("producto_id");
+    const productor = unico("productor_id");
+    setCampos((prev) => ({
+      ...prev,
+      planta_id: planta ?? prev.planta_id,
+      producto_id: prev.producto_id || producto || "",
+      productor_id: prev.productor_id || productor || "",
+    }));
+    const nombre = (lista: OpcionCatalogo[], id: string | null) => lista.find((x) => x.id === id)?.nombre;
+    if (planta) {
+      setNotaCv({ tipo: "ok", texto: `Completado según el stock del ${cv}: ${nombre(plantas, planta)}${producto ? ` · ${nombre(productos, producto)}` : ""}${productor ? ` · ${nombre(productores, productor)}` : ""}. Revisalo.` });
+    } else {
+      const ps = Array.from(new Set(delCv.map((l) => nombre(plantas, l.planta_id)).filter(Boolean))).join(", ");
+      setNotaCv({ tipo: "aviso", texto: `El ${cv} tiene mercadería en varias plantas (${ps}). Elegí en cuál estás.` });
+    }
   }
 
   // Se recalcula en vivo a medida que se escribe, para que se vea igual
@@ -234,28 +276,31 @@ export default function CalidadForm({
         </label>
         {campos.es_calada === "si" && (
           <div className="grid grid-cols-2 gap-4 bg-sky-50/50 rounded p-3">
-            <Campo label="N° de CP del camión">
+            <Campo label="Patente del camión">
+              <input
+                name="patente"
+                type="text"
+                className="input uppercase"
+                placeholder="Ej.: AB123CD"
+                required
+                value={campos.patente}
+                onChange={(e) => actualizar("patente", e.target.value)}
+              />
+            </Campo>
+            <Campo label="N° de CP (si ya está)">
               <input
                 name="numero_cp"
                 type="text"
                 inputMode="numeric"
                 className="input"
                 placeholder="Ej.: 00000-00000284"
-                required
                 value={campos.numero_cp}
                 onChange={(e) => actualizar("numero_cp", e.target.value)}
               />
             </Campo>
-            <Campo label="Patente (si querés)">
-              <input
-                name="patente"
-                type="text"
-                className="input uppercase"
-                placeholder="Ej.: AB123CD"
-                value={campos.patente}
-                onChange={(e) => actualizar("patente", e.target.value)}
-              />
-            </Campo>
+            <p className="col-span-2 text-[11px] text-sky-700 -mt-2">
+              Si la CP todavía no está, no pasa nada: cuando se cargue el egreso con esa CP, se asocia sola por la patente.
+            </p>
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 rounded p-3">
@@ -281,7 +326,10 @@ export default function CalidadForm({
               required
               className="input"
               value={campos.producto_id}
-              onChange={(e) => actualizar("producto_id", e.target.value)}
+              onChange={(e) => {
+                actualizar("producto_id", e.target.value);
+                if (campos.numero_contrato) completarPorCv(campos.numero_contrato, e.target.value);
+              }}
             >
               <option value="">Seleccionar…</option>
               {productos.map((p) => (
@@ -315,7 +363,11 @@ export default function CalidadForm({
               placeholder="Ej.: 26-124"
               value={campos.numero_contrato}
               onChange={(e) => actualizar("numero_contrato", e.target.value)}
+              onBlur={(e) => completarPorCv(e.target.value, campos.producto_id)}
             />
+            {notaCv && (
+              <p className={`text-xs mt-1 ${notaCv.tipo === "ok" ? "text-green-700" : "text-amber-700"}`}>{notaCv.texto}</p>
+            )}
           </Campo>
         </div>
 

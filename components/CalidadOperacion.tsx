@@ -91,7 +91,9 @@ export function RecuadroCalidad({ calidad }: { calidad?: CalidadOperacion }) {
                   {caladas.map((c) => (
                     <tr key={c.id} className="border-b last:border-0">
                       <td className="py-1 pr-3 whitespace-nowrap">{dm(c.fecha)} {c.hora ?? ""}</td>
-                      <td className="py-1 pr-3 whitespace-nowrap">{c.numero_cp}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap" title={c.cp_por_patente ? "Asociada por la patente con el egreso" : undefined}>
+                        {c.numero_cp ?? <span className="text-amber-700">CP pendiente</span>}
+                      </td>
                       <td className="py-1 pr-3">{c.patente ?? "—"}</td>
                       <td className="py-1 pr-3 text-right">{pct(c.valores.danos_totales)}</td>
                       {visibles.map(([k]) => (

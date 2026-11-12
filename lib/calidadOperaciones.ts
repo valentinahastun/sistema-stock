@@ -29,7 +29,8 @@ export type Calada = {
   id: string;
   fecha: string;
   hora: string | null;
-  numero_cp: string;
+  numero_cp: string | null; // la CP del camión (cargada o asociada por la patente con el egreso)
+  cp_por_patente: boolean; // true si la CP salió del egreso con esa patente
   patente: string | null;
   valores: Record<string, number | null>; // por parámetro, más "danos_totales"
 };
@@ -43,11 +44,35 @@ export function cvDeOperacion(o: { cv: string; lote: string | null }) {
 // Calidad por CV: los análisis (el más nuevo primero; cargados con el CV o
 // vinculados a un lote con ese CV) y las caladas de los camiones de la carga.
 export async function calidadPorCv(): Promise<Map<string, CalidadOperacion>> {
-  const { data } = await createClient()
-    .from("registros_calidad")
-    .select(`id, fecha, created_at, apto, numero_contrato, numero_cp, patente, lotes(cv), ${PARAMETROS_CALADA.map((p) => p[0]).join(", ")}`)
-    .order("fecha", { ascending: false })
-    .order("created_at", { ascending: false });
+  const supabase = createClient();
+  const [{ data }, { data: egresos }] = await Promise.all([
+    supabase
+      .from("registros_calidad")
+      .select(`id, fecha, created_at, apto, numero_contrato, numero_cp, patente, lotes(cv), ${PARAMETROS_CALADA.map((p) => p[0]).join(", ")}`)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase.from("movimientos_stock").select("cv, numero_cp, patente, fecha").eq("tipo", "egreso").not("cv", "is", null).not("patente", "is", null),
+  ]);
+  // Egresos por CV, para asociar cada calada a su CP por la patente del camión
+  // (la calada se hace antes de que se emita la CP)
+  // Patentes argentinas (AB123CD o ABC123), aunque estén escritas con espacios o guiones
+  const plantas = (s: string | null) =>
+    ((s ?? "").toUpperCase().match(/[A-Z]{2}[\s-]?\d{3}[\s-]?[A-Z]{2}|[A-Z]{3}[\s-]?\d{3}/g) ?? []).map((x) => x.replace(/[\s-]/g, ""));
+  const egresosCv = new Map<string, { cp: string; patentes: string[]; fecha: string }[]>();
+  (egresos ?? []).forEach((e: any) => {
+    const cv = normalizarCv(e.cv);
+    if (!cv || !e.numero_cp) return;
+    egresosCv.set(cv, [...(egresosCv.get(cv) ?? []), { cp: e.numero_cp, patentes: plantas(e.patente), fecha: e.fecha }]);
+  });
+  const dias = (a: string, b: string) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) / 864e5;
+  const cpPorPatente = (cv: string, patente: string | null, fecha: string) => {
+    const p = plantas(patente)[0];
+    if (!p) return null;
+    const e = (egresosCv.get(cv) ?? [])
+      .filter((x) => x.patentes.includes(p) && dias(x.fecha, fecha) <= 4)
+      .sort((a, b) => dias(a.fecha, fecha) - dias(b.fecha, fecha))[0];
+    return e?.cp ?? null;
+  };
   const mapa = new Map<string, CalidadOperacion>();
   const de = (cv: string) => {
     if (!mapa.has(cv)) mapa.set(cv, { analisis: [], caladas: [] });
@@ -56,7 +81,7 @@ export async function calidadPorCv(): Promise<Map<string, CalidadOperacion>> {
   (data ?? []).forEach((c: any) => {
     const lote = Array.isArray(c.lotes) ? c.lotes[0] : c.lotes;
     const cvs = new Set([normalizarCv(c.numero_contrato), lote?.cv ?? null].filter(Boolean) as string[]);
-    if (c.numero_cp) {
+    if (c.numero_cp || c.patente) {
       const valores: Record<string, number | null> = {};
       PARAMETROS_CALADA.forEach(([k]) => (valores[k] = c[k] == null ? null : Number(c[k])));
       const danos = DANOS.map((k) => valores[k]).filter((v): v is number => v != null);
@@ -68,10 +93,14 @@ export async function calidadPorCv(): Promise<Map<string, CalidadOperacion>> {
           ? new Date(c.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
           : null,
         numero_cp: c.numero_cp,
+        cp_por_patente: false,
         patente: c.patente,
         valores,
       };
-      cvs.forEach((cv) => de(cv).caladas.push(calada));
+      cvs.forEach((cv) => {
+        const cp = calada.numero_cp ? null : cpPorPatente(cv, c.patente, c.fecha);
+        de(cv).caladas.push(cp ? { ...calada, numero_cp: cp, cp_por_patente: true } : calada);
+      });
     } else {
       cvs.forEach((cv) => de(cv).analisis.push({ id: c.id, fecha: c.fecha, apto: c.apto }));
     }
