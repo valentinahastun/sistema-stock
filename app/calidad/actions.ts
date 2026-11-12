@@ -91,7 +91,7 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
     const numero_cp = esCalada ? strOrNull(formData.get("numero_cp")) : null;
     const patente = esCalada ? strOrNull(formData.get("patente"))?.toUpperCase().replace(/\s+/g, "") ?? null : null;
     if (esCalada && (!patente || !numero_contrato)) {
-      return { ok: false, error: "Para una calada de camión hacen falta la patente y el CV de la operación." };
+      return { ok: false, error: "Para el control de carga hacen falta la patente y el CV de la operación." };
     }
 
     if (!fecha) {

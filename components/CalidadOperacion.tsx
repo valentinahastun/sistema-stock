@@ -8,8 +8,8 @@ const pct = (n: number | null | undefined) => (n == null ? "—" : `${n.toLocale
 export function ChipCalidad({ analisis, caladas = 0 }: { analisis?: CalidadCv[]; caladas?: number }) {
   if (!analisis?.length) {
     return caladas > 0 ? (
-      <span className="text-[10px] font-semibold rounded-full px-1.5 py-px bg-sky-50 text-sky-700" title="Camiones con calada cargada">
-        🧪 {caladas} calad{caladas === 1 ? "a" : "as"}
+      <span className="text-[10px] font-semibold rounded-full px-1.5 py-px bg-sky-50 text-sky-700" title="Camiones con control de carga">
+        🧪 Control de carga · {caladas} {caladas === 1 ? "camión" : "camiones"}
       </span>
     ) : null;
   }
@@ -40,7 +40,7 @@ export function RecuadroCalidad({ calidad }: { calidad?: CalidadOperacion }) {
         {!analisis.length ? (
           <p className="text-gray-400">
             {caladas.length
-              ? "Todavía no hay análisis final; abajo están las caladas de la carga."
+              ? "Todavía no hay análisis final; abajo está el control de carga."
               : "Todavía no hay análisis cargado con este CV. Se carga en Calidad → Cargar, poniendo el CV."}
           </p>
         ) : (
@@ -61,9 +61,9 @@ export function RecuadroCalidad({ calidad }: { calidad?: CalidadOperacion }) {
         <div className="rounded-lg bg-sky-50/60 ring-1 ring-sky-100 p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <div className="text-xs font-semibold text-sky-800">
-              Calidad de la carga · promedio de {caladas.length} {caladas.length === 1 ? "camión" : "camiones"}
+              Control de carga · promedio de {caladas.length} {caladas.length === 1 ? "camión" : "camiones"}
             </div>
-            <div className="text-[11px] text-sky-700">última calada {caladas[0].hora ?? dm(caladas[0].fecha)}</div>
+            <div className="text-[11px] text-sky-700">último camión {caladas[0].hora ?? dm(caladas[0].fecha)}</div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {prom.danos_totales && <Cuadro t="Daños totales" v={pct(prom.danos_totales.valor)} fuerte />}

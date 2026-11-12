@@ -268,9 +268,9 @@ export default function CalidadForm({
             onChange={(e) => actualizar("es_calada", e.target.checked ? "si" : "")}
           />
           <span>
-            <span className="font-medium text-sky-800">Calada de un camión durante la carga</span>
+            <span className="font-medium text-sky-800">Control de carga</span>
             <span className="block text-xs text-sky-700">
-              Se ve en la operación (por el CV) con el promedio de todo lo que se va cargando.
+              Calidad de un camión mientras se carga. Se ve en la operación (por el CV) con el promedio de todo lo cargado.
             </span>
           </span>
         </label>
