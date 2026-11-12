@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ResumenArribos from "@/components/ResumenArribos";
 import { calidadPorCv, cvDeOperacion } from "@/lib/calidadOperaciones";
 import { RecuadroCalidad } from "@/components/CalidadOperacion";
 import { notFound } from "next/navigation";
@@ -126,6 +127,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
           <Dato t="Contenedores" v={o.contenedores} wide />
         </dl>
         <RecuadroCalidad calidad={calidad.get(cvDeOperacion(o) ?? "")} />
+        <ResumenArribos cv={cvDeOperacion(o)} />
         {puedeEditar && (
           <OpcionesOperacion
             clave={o.clave}
