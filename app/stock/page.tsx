@@ -40,6 +40,7 @@ export default async function StockPage({
       supabase
         .from("registros_calidad")
         .select("id, fecha, apto, lote_id, planta_id, producto_id, numero_contrato, productores(nombre)")
+        .is("numero_cp", null) // las caladas de camiones se ven en la operación, no en cada lote
         .order("fecha", { ascending: false }),
     ]);
 

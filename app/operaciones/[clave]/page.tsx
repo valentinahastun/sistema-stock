@@ -125,7 +125,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
           <Dato t="ETA" v={fecha(o.eta, true)} />
           <Dato t="Contenedores" v={o.contenedores} wide />
         </dl>
-        <RecuadroCalidad analisis={calidad.get(cvDeOperacion(o) ?? "")} />
+        <RecuadroCalidad calidad={calidad.get(cvDeOperacion(o) ?? "")} />
         {puedeEditar && (
           <OpcionesOperacion
             clave={o.clave}

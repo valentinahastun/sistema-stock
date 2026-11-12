@@ -86,6 +86,13 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
     const pct_materia_extrana = numOrNull(formData.get("pct_materia_extrana"));
     const pct_humedad = numOrNull(formData.get("pct_humedad"));
     const observaciones = strOrNull(formData.get("observaciones"));
+    // Calada de un camión durante la carga: CP (y patente) + CV de la operación
+    const esCalada = formData.get("es_calada") === "si";
+    const numero_cp = esCalada ? strOrNull(formData.get("numero_cp")) : null;
+    const patente = esCalada ? strOrNull(formData.get("patente"))?.toUpperCase().replace(/\s+/g, "") ?? null : null;
+    if (esCalada && (!numero_cp || !numero_contrato)) {
+      return { ok: false, error: "Para una calada de camión hacen falta el N° de CP y el CV de la operación." };
+    }
 
     if (!fecha) {
       return { ok: false, error: "Falta la fecha." };
@@ -157,6 +164,7 @@ export async function guardarCalidad(formData: FormData): Promise<Resultado> {
       pct_materia_extrana,
       pct_humedad,
       observaciones,
+      ...(esCalada ? { numero_cp, patente } : {}),
       ...coccion.datos,
       fotos: urls,
       created_by: perfil.id,

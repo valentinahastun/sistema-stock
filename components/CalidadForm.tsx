@@ -46,6 +46,9 @@ type Borrador = ValoresCoccion & {
   producto_id: string;
   productor_id: string;
   numero_contrato: string;
+  es_calada: string; // "si" = calada de un camión durante la carga
+  numero_cp: string;
+  patente: string;
   fecha: string;
   pct_partidos: string;
   pct_tegumento_danado: string;
@@ -66,6 +69,9 @@ function borradorVacio(hoy: string): Borrador {
     producto_id: "",
     productor_id: "",
     numero_contrato: "",
+    es_calada: "",
+    numero_cp: "",
+    patente: "",
     fecha: hoy,
     pct_partidos: "",
     pct_tegumento_danado: "",
@@ -210,6 +216,48 @@ export default function CalidadForm({
       )}
 
       <form ref={formRef} id="form-calidad" action={handleSubmit} className="space-y-4">
+        <label className="flex items-start gap-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            name="es_calada"
+            value="si"
+            className="mt-0.5"
+            checked={campos.es_calada === "si"}
+            onChange={(e) => actualizar("es_calada", e.target.checked ? "si" : "")}
+          />
+          <span>
+            <span className="font-medium text-sky-800">Calada de un camión durante la carga</span>
+            <span className="block text-xs text-sky-700">
+              Se ve en la operación (por el CV) con el promedio de todo lo que se va cargando.
+            </span>
+          </span>
+        </label>
+        {campos.es_calada === "si" && (
+          <div className="grid grid-cols-2 gap-4 bg-sky-50/50 rounded p-3">
+            <Campo label="N° de CP del camión">
+              <input
+                name="numero_cp"
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Ej.: 00000-00000284"
+                required
+                value={campos.numero_cp}
+                onChange={(e) => actualizar("numero_cp", e.target.value)}
+              />
+            </Campo>
+            <Campo label="Patente (si querés)">
+              <input
+                name="patente"
+                type="text"
+                className="input uppercase"
+                placeholder="Ej.: AB123CD"
+                value={campos.patente}
+                onChange={(e) => actualizar("patente", e.target.value)}
+              />
+            </Campo>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 rounded p-3">
           <Campo label="Planta">
             <select
@@ -258,11 +306,12 @@ export default function CalidadForm({
               ))}
             </select>
           </Campo>
-          <Campo label="CV / contrato (si tuviera)">
+          <Campo label={campos.es_calada === "si" ? "CV de la operación" : "CV / contrato (si tuviera)"}>
             <input
               name="numero_contrato"
               type="text"
               className="input"
+              required={campos.es_calada === "si"}
               placeholder="Ej.: 26-124"
               value={campos.numero_contrato}
               onChange={(e) => actualizar("numero_contrato", e.target.value)}
