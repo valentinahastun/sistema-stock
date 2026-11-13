@@ -731,6 +731,17 @@ export default function MovimientoForm({
           texto: `En stock hay ${fmtTn(disponiblePlanta!)} tn: la CP supera el stock por ${excesoKg.toLocaleString("es-AR")} kg (más de ${TOLERANCIA_EGRESO_KG} kg). Revisá la planta, el producto o los ingresos.`,
         };
 
+  // CPE ya confirmada (trae kg descargados): el egreso / directo guarda también el arribo
+  const arriboCp =
+    (tipo === "egreso" || tipo === "directo") && datosCp?.pesoNetoDescargaKg
+      ? {
+          descargadoKg: datosCp.pesoNetoDescargaKg,
+          cargadoKg: datosCp.pesoNetoCargaKg ?? null,
+          fecha: datosCp.fechaDescarga ?? null,
+          difKg: datosCp.pesoNetoCargaKg ? Math.round(datosCp.pesoNetoCargaKg - datosCp.pesoNetoDescargaKg) : null,
+        }
+      : null;
+
   async function handleSubmit(formData: FormData) {
     setEnviando(true);
     setMensaje(null);
@@ -1316,6 +1327,23 @@ export default function MovimientoForm({
         <Campo label="Observaciones">
           <textarea name="observaciones" className="input" rows={2} />
         </Campo>
+
+        {arriboCp && (
+          <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            <input type="hidden" name="arribo_descargado_kg" value={arriboCp.descargadoKg} />
+            <input type="hidden" name="arribo_cargado_kg" value={arriboCp.cargadoKg ?? ""} />
+            <input type="hidden" name="arribo_fecha" value={arriboCp.fecha ?? ""} />
+            <span className="font-medium">Esta CPE ya está confirmada:</span> se descargaron{" "}
+            {arriboCp.descargadoKg.toLocaleString("es-AR")} kg{arriboCp.fecha ? ` el ${arriboCp.fecha.split("-").reverse().join("/")}` : ""}
+            {arriboCp.difKg != null &&
+              (arriboCp.difKg === 0
+                ? ", justo lo cargado"
+                : ` (${arriboCp.difKg > 0 ? "faltaron" : "sobraron"} ${Math.abs(arriboCp.difKg).toLocaleString("es-AR")} kg${
+                    Math.abs(arriboCp.difKg) > 100 ? ", a reclamar" : ""
+                  })`)}
+            . Al guardar queda también el arribo en <span className="font-medium">Arribos a depósito</span>.
+          </div>
+        )}
 
         {mensaje && (
           <p

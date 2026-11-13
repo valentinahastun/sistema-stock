@@ -74,7 +74,7 @@ export async function confirmarArribos(cps: CpConfirmada[]): Promise<ResultadoAr
         archivo: c.archivo,
         cp: c.numeroCpe,
         estado: "no_encontrada",
-        texto: "No encontré un egreso ni un directo con esa CP. Cargalo primero en Movimientos.",
+        texto: "No encontré un egreso ni un directo con esa CP. Cargalo en Movimientos subiendo esta misma CPE: queda el egreso y el arribo de una.",
       });
       continue;
     }

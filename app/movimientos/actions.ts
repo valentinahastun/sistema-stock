@@ -25,6 +25,23 @@ function bolsasDe(formData: FormData) {
   return { bolsas_25: n("bolsas_25"), bolsas_50: n("bolsas_50"), big_bags: n("big_bags") };
 }
 
+// CPE ya confirmada al cargar el egreso / directo: se guarda también el arribo
+function arriboDe(formData: FormData) {
+  const kg = (k: string) => {
+    const v = Number(formData.get(k));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const descargado = kg("arribo_descargado_kg");
+  if (!descargado) return null;
+  const cargado = kg("arribo_cargado_kg");
+  const fecha = ((formData.get("arribo_fecha") as string) || "").trim() || null;
+  return {
+    cantidad_descargada: Math.round(descargado) / 1000,
+    cantidad_cargada_cp: cargado ? Math.round(cargado) / 1000 : null,
+    arribo_fecha: fecha,
+  };
+}
+
 export async function crearIngreso(formData: FormData): Promise<Resultado> {
   try {
     await verificarAdmin();
@@ -130,8 +147,13 @@ export async function crearMovimientoDirecto(formData: FormData): Promise<Result
       productor_texto,
       destino,
       cantidad,
-      cantidad_descargada,
       ...bolsasDe(formData),
+      ...(() => {
+        const a = arriboDe(formData);
+        return a
+          ? { ...a, cantidad_descargada: cantidad_descargada ?? a.cantidad_descargada }
+          : { cantidad_descargada };
+      })(),
       fecha,
       observaciones,
       ...(controlo_carga ? { controlo_carga } : {}),
@@ -225,6 +247,7 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
       observaciones: obsFinal,
       cv,
       ...bolsasDe(formData),
+      ...(arriboDe(formData) ?? {}),
       ...(controlo_carga ? { controlo_carga } : {}),
     });
 
