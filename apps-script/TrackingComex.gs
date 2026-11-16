@@ -607,10 +607,15 @@ function reiniciarLecturaMails() {
 // y devuelve los pasos reconocidos.
 function analizarMensajes(msgs) {
   const items = [];
-  const add = (m, paso, cv, seguro, motivo) => items.push({
-    id: m.id + ':' + paso, fecha: m.fecha, asunto: m.asunto, remitente: m.de, url: m.url,
-    cv: cv ? cv.cv : null, lote: cv ? cv.lote : '', cv_alt: cv ? cv.alt || null : null, paso, seguro, motivo,
-  });
+  const add = (m, paso, cv, seguro, motivo) => {
+    const it = {
+      id: m.id + ':' + paso, fecha: m.fecha, asunto: m.asunto, remitente: m.de, url: m.url,
+      cv: cv ? cv.cv : null, lote: cv ? cv.lote : '', cv_alt: cv ? cv.alt || null : null, paso, seguro, motivo,
+    };
+    items.push(it);
+    // Si llegó el original, el draft de ese documento también está
+    if (DR_DE_DOC[paso]) items.push(Object.assign({}, it, { id: m.id + ':' + DR_DE_DOC[paso], paso: DR_DE_DOC[paso] }));
+  };
   const delEquipo = m => MAIL.EQUIPO.indexOf(m.de) >= 0;
   const esProveedor = e => MAIL.PROVEEDORES.some(p => e.split('@')[1] && e.split('@')[1].indexOf(p) >= 0);
   const esCliente = e => e.indexOf('@') > 0 && !esProveedor(e);
@@ -839,8 +844,17 @@ function textoPropio(body) {
 // (MEDUWS173567.pdf, BUA0377068.pdf, COSU6472420940.pdf)
 const CODIGO_BL = /^([A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*|\d{5,10})(\s*\(\d+\))?\.pdf$/i;
 
+// Peso y calidad (ISB): "Quality & Weight", "Certificado de Peso", "Certificado de Calidad", "Quality report"
+const PESO_CALIDAD = /quality.*weight|weight.*quality|certificado\s+de\s+(peso|calidad)|quality\s+report|weight\s+(certificate|report)/i;
+
+// Cada original cuenta también como su draft
+const DR_DE_DOC = {
+  doc_peso: 'dr_peso', doc_fumigacion: 'dr_fumigacion', doc_co: 'dr_co', doc_fito: 'dr_fito', doc_bl: 'dr_bl',
+  doc_pl: 'dr_pl', doc_factura: 'dr_factura', doc_factura_silver: 'dr_factura_silver', doc_gmo: 'dr_gmo',
+};
+
 const DOCS_DRIVE = [
-  { re: /quality.*weight|weight.*quality/i, pasos: ['doc_peso'] },
+  { re: PESO_CALIDAD, pasos: ['doc_peso'] },
   { re: /fumigation|fumigaci/i, pasos: ['doc_fumigacion'] },
   { re: /documentos\s+originales/i, pasos: ['doc_co', 'doc_fito'] },
   { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
@@ -855,7 +869,7 @@ const DOCS_DRIVE = [
 
 // Drafts: archivos sueltos en DOCUS EXPO (no en las subcarpetas)
 const DRAFTS_DRIVE = [
-  { re: /quality.*weight|weight.*quality/i, paso: 'dr_peso' },
+  { re: PESO_CALIDAD, paso: 'dr_peso' },
   { re: /fumigation|fumigaci/i, paso: 'dr_fumigacion' },
   { re: /^origen\b|origen\s*-\s*ag/i, paso: 'dr_co' },
   { re: /fito/i, paso: 'dr_fito' },
@@ -947,10 +961,8 @@ function leerCarpetas() {
             const pasos = [];
             DOCS_DRIVE.forEach(d => { if (d.re.test(nombre)) d.pasos.forEach(p => pasos.push(p)); });
             if (nombraBooking(nombre, o.booking)) pasos.push('doc_bl');
-            // Si el BL está en Docus Definitivos, también cuenta como el BL de los drafts
-            if (pasos.indexOf('doc_bl') >= 0) pasos.push('dr_bl');
-            if (pasos.indexOf('doc_factura') >= 0) pasos.push('dr_factura');
-            if (pasos.indexOf('doc_factura_silver') >= 0) pasos.push('dr_factura_silver');
+            // Cada original en Docus Definitivos cuenta también como su draft (BL, factura, peso y calidad, fito…)
+            pasos.slice().forEach(p => { if (DR_DE_DOC[p] && pasos.indexOf(DR_DE_DOC[p]) < 0) pasos.push(DR_DE_DOC[p]); });
             pasos.forEach(paso => items.push({
               clave: o.clave, paso, detalle: nombre, url: a.getUrl(),
               fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd'),
