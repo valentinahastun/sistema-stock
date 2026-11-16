@@ -842,7 +842,8 @@ function textoPropio(body) {
 // Por el nombre de cada archivo de originales se marca el documento:
 // Archivo que se llama solo con el número de BL o booking de la naviera
 // (MEDUWS173567.pdf, BUA0377068.pdf, COSU6472420940.pdf)
-const CODIGO_BL = /^([A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*|\d{5,10})(\s*\(\d+\))?\.pdf$/i;
+// o booking + fecha y hora como lo baja COSCO (6472420940-20261113070005.PDF)
+const CODIGO_BL = /^([A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*|\d{5,10}|\d{8,12}-\d{8,14})(\s*\(\d+\))?\.pdf$/i;
 
 // Peso y calidad (ISB): "Quality & Weight", "Certificado de Peso", "Certificado de Calidad", "Quality report"
 const PESO_CALIDAD = /quality.*weight|weight.*quality|certificado\s+de\s+(peso|calidad)|quality\s+report|weight\s+(certificate|report)/i;
@@ -1002,7 +1003,9 @@ function leerCarpetas() {
 
 function nombraBooking(nombre, booking) {
   const bk = String(booking || '').toUpperCase().split(/[\s,;/]+/).filter(n => n.length >= 6 && /\d{5,}/.test(n));
-  return bk.some(n => String(nombre).toUpperCase().indexOf(n) >= 0);
+  const nom = String(nombre).toUpperCase();
+  // El booking completo (COSU6472420940) o solo su número (6472420940)
+  return bk.some(n => nom.indexOf(n) >= 0 || (n.match(/\d{6,}/g) || []).some(d => nom.indexOf(d) >= 0));
 }
 
 function subcarpetas(padre, re) {
