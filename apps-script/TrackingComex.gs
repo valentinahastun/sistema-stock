@@ -873,6 +873,8 @@ const DRAFTS_DRIVE = [
   { re: /fumigation|fumigaci/i, paso: 'dr_fumigacion' },
   { re: /^origen\b|origen\s*-\s*ag/i, paso: 'dr_co' },
   { re: /fito/i, paso: 'dr_fito' },
+  // Borrador del fito que se baja de SENASA: "SolicitudesDeCertificados-Tramite-1158953-....pdf"
+  { re: /solicitud(es)?\s*de\s*certificados?/i, paso: 'dr_fito' },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: CODIGO_BL, paso: 'dr_bl' },
   { re: /^pl\b|packing/i, paso: 'dr_pl' },
