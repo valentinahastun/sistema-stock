@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import { repartirEgresos } from "@/lib/repartoEgresos";
+import CargaVariasCp from "@/components/CargaVariasCp";
 import MovimientoForm from "@/components/MovimientoForm";
 import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
 
@@ -109,6 +110,18 @@ export default async function MovimientosPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold mb-4 text-brand-navy">Cargar movimiento</h1>
+      <CargaVariasCp
+        plantas={plantas ?? []}
+        productos={productos ?? []}
+        productores={productores ?? []}
+        stock={(stock ?? []).map((x: any) => ({
+          planta_id: x.planta_id,
+          producto_id: x.producto_id,
+          tn: Number(x.stock_disponible_tn),
+        }))}
+        lotesStock={lotesStock}
+      />
+
       <MovimientoForm
         plantas={plantas ?? []}
         productos={productos ?? []}

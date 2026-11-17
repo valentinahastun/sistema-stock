@@ -6,9 +6,9 @@ import { crearDesdeCp } from "@/app/catalogos/actions";
 import { normalizarCv } from "@/lib/cv";
 import { leerBolsas } from "@/lib/bolsas";
 
-type Catalogo = { id: string; nombre: string };
+export type Catalogo = { id: string; nombre: string };
 
-type DatosCp = {
+export type DatosCp = {
   numeroCpe: string | null;
   ctg: string | null;
   chofer: string | null;
@@ -49,7 +49,7 @@ const REGLAS_PRODUCTO_DIRECTO: { patron: RegExp; nombreProducto: string }[] = [
   { patron: /poroto/i, nombreProducto: "Poroto Adzuki" },
 ];
 
-function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): string | null {
+export function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): string | null {
   if (!granoTipo) return null;
   // Colorado Dark vs Light no se distingue en el texto de la CP: mejor no
   // adivinar y que se elija a mano, en vez de arriesgar el catch-all de Adzuki.
@@ -76,7 +76,7 @@ const ALIAS_EMISOR: { patron: RegExp; nombre: string }[] = [
   { patron: /agro\s*bull/i, nombre: "BIURRUM" },
 ];
 
-function conAlias(nombre: string | null | undefined): string | null {
+export function conAlias(nombre: string | null | undefined): string | null {
   if (!nombre) return null;
   return ALIAS_EMISOR.find((a) => a.patron.test(nombre))?.nombre ?? nombre;
 }
@@ -94,7 +94,7 @@ function normalizar(n: string): string {
     .trim();
 }
 
-function buscarEnCatalogo(nombre: string | null | undefined, catalogo: Catalogo[]): Catalogo | null {
+export function buscarEnCatalogo(nombre: string | null | undefined, catalogo: Catalogo[]): Catalogo | null {
   if (!nombre) return null;
   const n = normalizar(nombre);
   if (!n) return null;
@@ -115,12 +115,12 @@ export type LoteConProductor = {
   cv?: string | null;
   tn: number;
 };
-type Nota = { tipo: "ok" | "aviso"; texto: string };
+export type Nota = { tipo: "ok" | "aviso"; texto: string };
 // Diferencias de balanza aceptadas
 const TOLERANCIA_EGRESO_KG = 200; // egreso que supera el stock: se carga igual y deja el stock en 0
 const TOLERANCIA_INGRESO_KG = 100; // ingreso: diferencia entre kg cargados y descargados que dispara aviso
 type Pista = { nombre: string | null; de: string };
-type Contexto = {
+export type Contexto = {
   plantaId: string;
   productoId: string;
   cv: string | null;
@@ -179,7 +179,7 @@ function avisoCvAusente(c: Contexto): Nota {
 // Sugerencia de productor para un egreso. Orden: el CV (dueño de la
 // mercadería de ese CV en la planta), el nombre de la planta o del titular
 // de la CP, el único productor con stock ahí. Si no se puede, se lista.
-function sugerirProductor(c: Contexto & { pistas: Pista[] }): { id: string; notas: Nota[] } {
+export function sugerirProductor(c: Contexto & { pistas: Pista[] }): { id: string; notas: Nota[] } {
   const aca = deAca(c);
   const que = c.productoId ? "de este producto " : "";
   const notas: Nota[] = [];
