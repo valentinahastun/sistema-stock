@@ -924,8 +924,11 @@ function leerCarpetas() {
         '\\s*(er|ro|do|to|vo|mo|no|°|º)?\\s*(embarque|cruce|carga|env[ií]o))', 'i'))[0] : null;
       const base = delLote || c.f;
       carpetas.push({ clave: o.clave, url: base.getUrl() });
-      // Archivos de la carpeta de la operación (IP, booking)
-      [c.f].concat(delLote ? [delLote] : []).forEach(carp => {
+      // Archivos de la carpeta de la operación (IP, booking, CP) y de su subcarpeta de CP
+      // ("CPs", "CP", "Cartas de porte"), si la armaron
+      const raices = [c.f].concat(delLote ? [delLote] : []);
+      raices.slice().forEach(carp => subcarpetas(carp, /^\s*(cpe?s?|cartas?\s+de\s+porte)(?![a-z])/i).forEach(sub => raices.push(sub)));
+      raices.forEach(carp => {
         const fs = carp.getFiles();
         while (fs.hasNext()) {
           const a = fs.next();
