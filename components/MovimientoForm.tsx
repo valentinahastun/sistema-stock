@@ -49,8 +49,39 @@ const REGLAS_PRODUCTO_DIRECTO: { patron: RegExp; nombreProducto: string }[] = [
   { patron: /poroto/i, nombreProducto: "Poroto Adzuki" },
 ];
 
-export function detectarProductoId(granoTipo: string | null, productos: Catalogo[]): string | null {
-  if (!granoTipo) return null;
+// En un egreso, para resolver el producto cuando la CP no lo dice (ej.: "Poroto
+// Distinto del Blanco Oval y Alubia" puede ser cranberry, negro, mung...):
+// se mira qué hay en esa planta para ese CV o, si no, qué hay en stock.
+export type ContextoProducto = {
+  plantaId: string;
+  cv: string | null;
+  stock: { planta_id: string; producto_id: string; tn: number }[];
+  lotes: LoteConProductor[];
+};
+
+export function detectarProductoId(
+  granoTipoOriginal: string | null,
+  productos: Catalogo[],
+  ctx?: ContextoProducto | null
+): string | null {
+  if (!granoTipoOriginal) return null;
+  // "Distinto del Blanco Oval y Alubia" es la categoría de los porotos de color:
+  // el "Alubia" de ese texto no quiere decir que sea alubia.
+  const distinto = /distinto\s+del\s+blanco/i.test(granoTipoOriginal);
+  const granoTipo = distinto ? granoTipoOriginal.replace(/oval\s+y\s+alubia/gi, " ") : granoTipoOriginal;
+  const conVariedad = /\b(negro|cranberry|garbanzo|mung|colorado|adzuki|azuki)\b/i.test(granoTipo);
+  if (distinto && !conVariedad && ctx?.plantaId) {
+    const candidatos = productos.filter((p) => !/^descarte/i.test(p.nombre.trim()) && !/alubia/i.test(p.nombre));
+    const es = (id: string) => candidatos.some((c) => c.id === id);
+    const unicos = (ids: string[]) => Array.from(new Set(ids)).filter(es);
+    if (ctx.cv) {
+      const delCv = unicos(ctx.lotes.filter((l) => l.planta_id === ctx.plantaId && l.cv === ctx.cv).map((l) => l.producto_id));
+      if (delCv.length === 1) return delCv[0];
+    }
+    const conStock = unicos(ctx.stock.filter((s) => s.planta_id === ctx.plantaId && s.tn > 0.0005).map((s) => s.producto_id));
+    if (conStock.length === 1) return conStock[0];
+    return null;
+  }
   // Colorado Dark vs Light no se distingue en el texto de la CP: mejor no
   // adivinar y que se elija a mano, en vez de arriesgar el catch-all de Adzuki.
   if (/colorado/i.test(granoTipo)) return null;
@@ -448,7 +479,11 @@ export default function MovimientoForm({
     // Producto: se asocia leyendo "Grano / especie" y "Tipo" de la CP.
     // Colorado no dice si es Dark o Light: en un egreso se elige el que
     // tiene stock en esa planta (si hay uno solo); si no, se elige a mano.
-    let productoDetectado = detectarProductoId(datos.granoTipo, productos);
+    let productoDetectado = detectarProductoId(
+      datos.granoTipo,
+      productos,
+      tipoActual === "egreso" && plantaElegida ? { plantaId: plantaElegida, cv: cvEgreso, stock, lotes: lotesStock } : null
+    );
     const esColorado = /colorado/i.test(datos.granoTipo ?? "");
     if (!productoDetectado && esColorado && plantaElegida) {
       const conStock = productos.filter(
@@ -1016,7 +1051,15 @@ export default function MovimientoForm({
                 placeholder="Ej.: 26-124"
                 value={cvTexto}
                 onChange={(e) => setCvTexto(e.target.value)}
-                onBlur={() => setCvEgreso(normalizarCv(cvTexto))}
+                onBlur={() => {
+                  const cvN = normalizarCv(cvTexto);
+                  setCvEgreso(cvN);
+                  // Si la CP no decía el producto, el CV puede resolverlo (lo que hay de ese CV en la planta)
+                  if (!productoId && datosCp && plantaId) {
+                    const p = detectarProductoId(datosCp.granoTipo, productos, { plantaId, cv: cvN, stock, lotes: lotesStock });
+                    if (p) setProductoId(p);
+                  }
+                }}
               />
             </Campo>
 

@@ -78,7 +78,8 @@ export default function CargaVariasCp({
       productor = buscarEnCatalogo(emisor, productores)?.id ?? "";
       planta = buscarEnCatalogo(conAlias(d.destinoNombre), plantas)?.id ?? "";
     }
-    let producto = detectarProductoId(d.granoTipo, productos) ?? "";
+    let producto =
+      detectarProductoId(d.granoTipo, productos, t === "egreso" && planta ? { plantaId: planta, cv: cvNorm, stock, lotes: lotesStock } : null) ?? "";
     if (!producto && /colorado/i.test(d.granoTipo ?? "") && planta) {
       const con = sinDescarte.filter(
         (p) => /colorado/i.test(p.nombre) && stock.some((x) => x.planta_id === planta && x.producto_id === p.id && x.tn > 0)
