@@ -99,10 +99,10 @@ export function drafts(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
 export function documentos(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
   if (esTerrestre(o))
     return [
-      { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
-      { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
+      { codigo: "doc_fito", nombre: "Fitosanitario (All Bridges)" },
+      { codigo: "doc_co", nombre: "Certificado de origen (All Bridges)" },
       { codigo: "doc_factura", nombre: "Factura Argreen" },
-      { codigo: "doc_crt", nombre: "MIC/DTA y CRT" },
+      { codigo: "doc_crt", nombre: "MIC/CRT definitivo (All Bridges)" },
       { codigo: "doc_pl", nombre: "Packing list" },
     ];
   const lista: Paso[] = [
@@ -137,8 +137,8 @@ function pasosTerrestre(o: Operacion): Paso[] {
     { codigo: "pe", nombre: "PE oficializado", ayuda: "Fecha de oficialización en SEGUIMIENTO (col. AB)" },
     { codigo: "camiones", nombre: "Camiones cargados" },
     { codigo: "originales", nombre: "Originales completos", ayuda: "Fito, CO, factura, MIC/CRT y PL" },
-    { codigo: "cruce", nombre: "Cruce OK" },
-    { codigo: "descarga", nombre: "Descarga en destino" },
+    { codigo: "cruce", nombre: "Cruce OK", ayuda: "Lo avisa el transporte por mail" },
+    { codigo: "descarga", nombre: "Descarga en destino", ayuda: "Lo avisa el transporte por mail (conformes)" },
     { codigo: "cobranza", nombre: "Cobranza" },
   );
   return lista;
