@@ -515,6 +515,7 @@ function leerMails() {
     equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque"} ' + despues,
     // Terrestres: lo que va y viene con All Bridges (despachante) y las novedades del transporte
     equipo + ' to:allbridges.com.ar has:attachment ' + despues,
+    equipo + ' has:attachment subject:CV {destino chile santiago uruguay montevideo} ' + despues,
     'from:allbridges.com.ar has:attachment ' + despues,
     '-from:argreen.com.ar {cruzo cruzó cruzaron "aduana de los andes" descargado descargada descargó conformes} ' + despues,
     'DDEE ' + despues,
@@ -621,8 +622,9 @@ function reiniciarLecturaMails() {
 
 // Cargas terrestres (Chile / Uruguay). All Bridges manda el PE (EC01-xxxx),
 // el CO digital (cod_visualizer / AR020A….xml), el fito (851-AR-CL-…) y la
-// "documentación definitiva" (ARGREEN 3143J.pdf = MIC/CRT). Nosotros les
-// mandamos la factura E y el PL. El transporte avisa el cruce y la descarga.
+// "documentación definitiva" (ARGREEN 3143J.pdf = MIC/CRT). La factura E y el
+// PL los mandamos nosotros al cliente. El transporte avisa el cruce y la descarga.
+// Si algo no llega por mail, se toma de la carpeta principal de la operación.
 function reglasTerrestres(m, cv, add, delEquipo, terrestres) {
   const esTerrestre = cv && terrestres.indexOf(cv.cv) >= 0;
   const deAllBridges = m.de.indexOf(MAIL.DESPACHANTE_TERRESTRE) >= 0;
@@ -638,9 +640,10 @@ function reglasTerrestres(m, cv, add, delEquipo, terrestres) {
   }
   if (!esTerrestre) return;
   if (delEquipo(m)) {
-    if (m.para.some(e => e.indexOf(MAIL.DESPACHANTE_TERRESTRE) >= 0)) {
-      if (tiene(/^\d{11}_019_/)) add(m, 'doc_factura', cv, true, 'Factura E enviada a All Bridges');
-      if (tiene(/^pl\b|packing/i)) add(m, 'doc_pl', cv, true, 'Packing list enviado a All Bridges');
+    // La factura E y el PL se mandan al cliente (o a su despachante): cualquier mail nuestro hacia afuera
+    if (m.para.some(e => e.indexOf('@argreen.com.ar') < 0)) {
+      if (tiene(/^\d{11}_019_/)) add(m, 'doc_factura', cv, true, 'Factura E enviada (' + m.para.filter(e => e.indexOf('@argreen.com.ar') < 0)[0] + ')');
+      if (tiene(/^pl\b|packing/i)) add(m, 'doc_pl', cv, true, 'Packing list enviado (' + m.para.filter(e => e.indexOf('@argreen.com.ar') < 0)[0] + ')');
     }
     return;
   }
