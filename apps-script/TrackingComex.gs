@@ -28,8 +28,9 @@ const CONFIG = {
   // Solo contratos de este año en adelante (prefijo del CV)
   PREFIJOS_CV: ['26-', '27-'],
 
-  // Destinos que no entran: Iguazú, Brasil y terrestres a Chile y Uruguay
-  EXCLUIR_DESTINOS: ['iguaz', 'brasil', 'chile', 'santiago', 'longav', 'uruguay', 'montevideo', 'fray bentos', 'argentina'],
+  // Destinos que no entran: Iguazú, Brasil, Fray Bentos y Argentina.
+  // Los terrestres a Chile y Uruguay sí entran, con su propia operatoria (sin BL).
+  EXCLUIR_DESTINOS: ['iguaz', 'brasil', 'fray bentos', 'argentina'],
 
   MAIL_DESTINATARIOS: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   HORA_MAIL: 8,
@@ -506,7 +507,7 @@ function leerMails() {
     equipo + ' subject:apertura subject:cobranza ' + despues,
     '-from:argreen.com.ar {approved aprobados aprobado ok "proceder con" "proceed to the originals" "proceed with the originals"} ' + despues,
     // Proforma / datos del PE que mandan a Reymar, y la DDEE (Reymar la manda, se reenvía al cliente y se aprueba)
-    equipo + ' to:reymar.com.ar {subject:proforma subject:PE} ' + despues,
+    equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque"} ' + despues,
     'DDEE ' + despues,
     // IP / permiso de importación que manda el cliente o el broker ("Adjunto IP", "SPS Import Clearance")
     '-from:argreen.com.ar has:attachment {"adjunto IP" "adjunto el IP" "adjunto la IP" "adjuntamos IP" "attached IP" "IP attached" "import permit" "import clearance" "SPS IC"} ' + despues,
@@ -631,7 +632,7 @@ function analizarMensajes(msgs) {
 
     // 9: proforma / datos para oficializar el PE: "PROFORMA CV 26-131 ...", "CV 26-113 PROFORMA ...", "PE CV 26-132 ..."
     if (delEquipo(m) && m.para.some(e => /reymar/i.test(e)) &&
-        (/\bproforma\b/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto))) {
+        (/\bproforma\b|apertura\s+de\s+embarque/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto))) {
       add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma enviada a Reymar' : 'Proforma enviada sin CV en el asunto');
     }
 
@@ -861,6 +862,8 @@ const DOCS_DRIVE = [
   { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
   { re: /\d+-AR-[A-Z]{2}-\d+|^fito/i, pasos: ['doc_fito'] },
   { re: /^pl\b|packing/i, pasos: ['doc_pl'] },
+  // Terrestres: MIC/DTA y CRT (carta de porte internacional)
+  { re: /(^|[^a-z])(crt|mic)([^a-z]|$)|mic\s*\/?\s*dta|carta de porte internacional/i, pasos: ['doc_crt'] },
   { re: /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i, pasos: ['doc_gmo'] },
   { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
   { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
