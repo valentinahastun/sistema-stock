@@ -31,6 +31,8 @@ const CONFIG = {
   // Destinos que no entran: Iguazú, Brasil, Fray Bentos y Argentina.
   // Los terrestres a Chile y Uruguay sí entran, con su propia operatoria (sin BL).
   EXCLUIR_DESTINOS: ['iguaz', 'brasil', 'fray bentos', 'argentina'],
+  // Terrestres (igual que op_es_terrestre en Supabase y esTerrestre en la plataforma)
+  TERRESTRE: /(chile|santiago|longav|uruguay|montevideo)/i,
 
   MAIL_DESTINATARIOS: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   HORA_MAIL: 8,
@@ -481,7 +483,10 @@ const MAIL = {
   EQUIPO: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   PROVEEDORES: ['argreen.com.ar', 'reymar', 'cargostaff', 'isbargentina', 'fiscalessanmartin', 'splushipping',
     'americanashipping', 'interborders', 'rucalogistics', 'loginetsa', 'defibe', 'censersa',
-    'forwarding.com.ar', 'beyonders', 'biofixagri', 'controlunion', 'glog.com.ar'],
+    'forwarding.com.ar', 'beyonders', 'biofixagri', 'controlunion', 'glog.com.ar',
+    'allbridges', 'bull-logistics', 'mercotruck', 'pirazzoli', 'yagutrans'],
+  // Despachante de las cargas terrestres (PE, CO, fito, MIC/CRT)
+  DESPACHANTE_TERRESTRE: 'allbridges',
   // Forwarders: mandan el draft de BL
   FORWARDERS: ['cargostaff', 'interborders', 'splushipping', 'americanashipping', 'forwarding.com.ar',
     'beyonders', 'glog.com.ar', 'rucalogistics', 'loginetsa', 'transcargo'],
@@ -508,6 +513,10 @@ function leerMails() {
     '-from:argreen.com.ar {approved aprobados aprobado ok "proceder con" "proceed to the originals" "proceed with the originals"} ' + despues,
     // Proforma / datos del PE que mandan a Reymar, y la DDEE (Reymar la manda, se reenvía al cliente y se aprueba)
     equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque"} ' + despues,
+    // Terrestres: lo que va y viene con All Bridges (despachante) y las novedades del transporte
+    equipo + ' to:allbridges.com.ar has:attachment ' + despues,
+    'from:allbridges.com.ar has:attachment ' + despues,
+    '-from:argreen.com.ar {cruzo cruzó cruzaron "aduana de los andes" descargado descargada descargó conformes} ' + despues,
     'DDEE ' + despues,
     // IP / permiso de importación que manda el cliente o el broker ("Adjunto IP", "SPS Import Clearance")
     '-from:argreen.com.ar has:attachment {"adjunto IP" "adjunto el IP" "adjunto la IP" "adjuntamos IP" "attached IP" "IP attached" "import permit" "import clearance" "SPS IC"} ' + despues,
@@ -532,7 +541,7 @@ function leerMails() {
     const de = direcciones(m.getFrom())[0] || '';
     const texto = textoPropio(m.getPlainBody() || '');
     // Los adjuntos tardan en leerse: solo cuando pueden servir
-    const verAdjuntos = MAIL.EQUIPO.indexOf(de) >= 0 || /reymar/i.test(de) ||
+    const verAdjuntos = MAIL.EQUIPO.indexOf(de) >= 0 || /reymar|allbridges/i.test(de) ||
       (MAIL.FORWARDERS.some(f => de.indexOf(f) >= 0) && /draft|borrador/i.test(m.getSubject() + ' ' + texto));
     msgs.push({
       id: m.getId(),
@@ -550,7 +559,13 @@ function leerMails() {
     });
   });
 
-  const items = analizarMensajes(msgs);
+  // CV de las operaciones terrestres abiertas (para las reglas de All Bridges y del transporte)
+  let terrestres = [];
+  try {
+    terrestres = rpc('op_activas_token', { p_token: prop('TOKEN_SYNC') })
+      .filter(o => CONFIG.TERRESTRE.test(o.destino || '')).map(o => o.cv);
+  } catch (e) { Logger.log('No se pudieron leer las operaciones terrestres: ' + e.message); }
+  const items = analizarMensajes(msgs, terrestres);
   let r = { nuevos: 0, aplicados: 0, pendientes: 0 };
   for (let i = 0; i < items.length; i += 200) {
     const x = rpc('op_mail', { p_token: prop('TOKEN_SYNC'), p_items: items.slice(i, i + 200) });
@@ -604,9 +619,44 @@ function reiniciarLecturaMails() {
   return leerMails();
 }
 
+// Cargas terrestres (Chile / Uruguay). All Bridges manda el PE (EC01-xxxx),
+// el CO digital (cod_visualizer / AR020A….xml), el fito (851-AR-CL-…) y la
+// "documentación definitiva" (ARGREEN 3143J.pdf = MIC/CRT). Nosotros les
+// mandamos la factura E y el PL. El transporte avisa el cruce y la descarga.
+function reglasTerrestres(m, cv, add, delEquipo, terrestres) {
+  const esTerrestre = cv && terrestres.indexOf(cv.cv) >= 0;
+  const deAllBridges = m.de.indexOf(MAIL.DESPACHANTE_TERRESTRE) >= 0;
+  const adj = m.adjuntos || [];
+  const tiene = re => adj.some(a => re.test(a));
+  if (deAllBridges) {
+    if (tiene(/^EC01-/i)) add(m, 'pe', cv, !!cv, cv ? 'All Bridges mandó el PE' : 'PE de All Bridges sin CV en el asunto');
+    if (!esTerrestre) return;
+    if (tiene(/cod_visualizer|^AR020A\d+/i)) add(m, 'doc_co', cv, true, 'All Bridges mandó el certificado de origen (COD)');
+    if (tiene(/\d+-AR-[A-Z]{2}-\d+/)) add(m, 'doc_fito', cv, true, 'All Bridges mandó el fito');
+    if (tiene(/^argreen\s+\d{3,5}[a-z]\b/i)) add(m, 'doc_crt', cv, true, 'All Bridges mandó la documentación definitiva (MIC/CRT)');
+    return;
+  }
+  if (!esTerrestre) return;
+  if (delEquipo(m)) {
+    if (m.para.some(e => e.indexOf(MAIL.DESPACHANTE_TERRESTRE) >= 0)) {
+      if (tiene(/^\d{11}_019_/)) add(m, 'doc_factura', cv, true, 'Factura E enviada a All Bridges');
+      if (tiene(/^pl\b|packing/i)) add(m, 'doc_pl', cv, true, 'Packing list enviado a All Bridges');
+    }
+    return;
+  }
+  // Transporte (o el despachante del cliente): cruce y descarga
+  const t = m.texto || '';
+  if (/\b(cruz[oó]|cruzaron|ya cruz\w*|ingres[oó] a (chile|uruguay)|aduana de los andes)\b/i.test(t) &&
+      !/\b(no (puede |pudo )?cruz\w*)\b/i.test(t))
+    add(m, 'cruce', cv, true, 'El transporte avisó el cruce (' + m.de + ')');
+  if (/\b(descargad[oa]s?|descarg[oó]|conformes? de (la )?descarga|adjunto (los )?conformes)\b/i.test(t))
+    add(m, 'descarga', cv, true, 'El transporte avisó la descarga (' + m.de + ')');
+}
+
 // Recibe los mensajes ya leídos (objetos simples, para poder probarlo sin Gmail)
 // y devuelve los pasos reconocidos.
-function analizarMensajes(msgs) {
+function analizarMensajes(msgs, terrestres) {
+  terrestres = terrestres || [];
   const items = [];
   const add = (m, paso, cv, seguro, motivo) => {
     const it = {
@@ -635,6 +685,12 @@ function analizarMensajes(msgs) {
         (/\bproforma\b|apertura\s+de\s+embarque/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto))) {
       add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma enviada a Reymar' : 'Proforma enviada sin CV en el asunto');
     }
+    // Terrestres: proforma y apertura de embarque adjuntas en el mail a All Bridges
+    if (delEquipo(m) && m.para.some(e => e.indexOf(MAIL.DESPACHANTE_TERRESTRE) >= 0) &&
+        m.adjuntos.some(a => /proforma|apertura\s+de\s+embarque/i.test(a))) {
+      add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma y apertura de embarque enviadas a All Bridges' : 'Proforma a All Bridges sin CV en el asunto');
+    }
+    reglasTerrestres(m, cvMail, add, delEquipo, terrestres);
 
     // 10: DDEE. Reymar la manda (después del consolidado), se reenvía al cliente y se aprueba
     //     ("DDEE ok", "proceder con draft", "lo veo ok", "adjunto DDEE definitiva", "tomar como válida la DDEE de este correo")
@@ -859,11 +915,11 @@ const DOCS_DRIVE = [
   { re: PESO_CALIDAD, pasos: ['doc_peso'] },
   { re: /fumigation|fumigaci/i, pasos: ['doc_fumigacion'] },
   { re: /documentos\s+originales/i, pasos: ['doc_co', 'doc_fito'] },
-  { re: /^cod\b|certificado de origen/i, pasos: ['doc_co'] },
+  { re: /^cod\b|certificado de origen|cod_visualizer|^AR020A\d+/i, pasos: ['doc_co'] },
   { re: /\d+-AR-[A-Z]{2}-\d+|^fito/i, pasos: ['doc_fito'] },
   { re: /^pl\b|packing/i, pasos: ['doc_pl'] },
   // Terrestres: MIC/DTA y CRT (carta de porte internacional)
-  { re: /(^|[^a-z])(crt|mic)([^a-z]|$)|mic\s*\/?\s*dta|carta de porte internacional/i, pasos: ['doc_crt'] },
+  { re: /(^|[^a-z])(crt|mic)([^a-z]|$)|mic\s*\/?\s*dta|carta de porte internacional|^argreen\s+\d{3,5}[a-z]\b/i, pasos: ['doc_crt'] },
   { re: /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i, pasos: ['doc_gmo'] },
   { re: /^\d{11}_019_/, pasos: ['doc_factura'] },                 // Factura E de Argreen
   { re: /silver\s+invoice/i, pasos: ['doc_factura_silver'] },
@@ -893,6 +949,7 @@ const RAIZ_DRIVE = [
   { re: /cert-rlu|(^|[^a-z])ip([^a-z0-9]|$)|import\s*permit|import\s*clearance|sps[\s_-]*ic|^[0-9a-f]{32}_\d+_m\.pdf$/i, paso: 'ip' },
   { re: /^bk\b|booking\s*confirm/i, paso: 'booking' },
   { re: /^ofic_/i, paso: 'pe' },            // PE oficializado
+  { re: /^EC01-/i, paso: 'pe' },            // PE que manda All Bridges (terrestres)
   { re: /^cpe-/i, paso: 'camiones' },       // carta de porte electrónica
 ];
 
@@ -942,6 +999,15 @@ function leerCarpetas() {
             if (d.re.test(nombre)) items.push({ clave: o.clave, paso: d.paso, detalle: nombre, url: a.getUrl(),
               fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
           });
+          // Terrestres: no arman DOCUS EXPO, los originales van en la carpeta principal.
+          // Los borradores (CCET_MERCOSUR, SolicitudesDeCertificados, 26AR…) no cuentan.
+          if (CONFIG.TERRESTRE.test(o.destino || '') && !/ccet_mercosur|solicitud(es)?\s*de\s*certificados?|^\d{2}AR\d{6}|draft|borrador/i.test(nombre)) {
+            DOCS_DRIVE.forEach(d => {
+              if (d.re.test(nombre) && d.pasos.some(p => ['doc_fito', 'doc_co', 'doc_factura', 'doc_crt', 'doc_pl'].indexOf(p) >= 0))
+                d.pasos.forEach(p => items.push({ clave: o.clave, paso: p, detalle: nombre, url: a.getUrl(),
+                  fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') }));
+            });
+          }
         }
       });
       subcarpetas(base, /docus\s*expo/i).forEach(expo => {

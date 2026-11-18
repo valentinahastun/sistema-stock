@@ -202,3 +202,22 @@ as $$
   from a
   order by case a.a_nivel when 'vencida' then 0 else 1 end, a.a_lim nulls first, a.clave;
 $$;
+
+-- El robot necesita el destino de cada operación abierta para saber cuáles
+-- son terrestres (sus originales van en la carpeta principal y los manda All Bridges).
+drop function if exists public.op_activas_token(text);
+create function public.op_activas_token(p_token text)
+returns table (clave text, cv text, lote text, booking text, destino text)
+language plpgsql
+stable
+security definer set search_path = public
+as $$
+begin
+  if p_token is null or p_token <> (select valor from op_config where op_config.clave = 'token_sync') then
+    raise exception 'token inválido';
+  end if;
+  return query select o.clave, o.cv, o.lote, o.booking, o.destino from op_operaciones o where o.activa order by o.clave;
+end;
+$$;
+revoke all on function public.op_activas_token(text) from public;
+grant execute on function public.op_activas_token(text) to anon, authenticated;
