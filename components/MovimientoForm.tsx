@@ -348,6 +348,10 @@ export default function MovimientoForm({
     { tipo: "ok" | "error"; texto: string } | null
   >(null);
   const inputCpRef = useRef<HTMLInputElement>(null);
+  const inputFotoRef = useRef<HTMLInputElement>(null);
+  // Si la CP se leyó de una foto: lo que conviene revisar (null = PDF o nada)
+  const [dudasFoto, setDudasFoto] = useState<string[] | null>(null);
+  const [progresoFoto, setProgresoFoto] = useState<string | null>(null);
 
   function limpiarCamposCp() {
     setNumeroCp("");
@@ -370,7 +374,9 @@ export default function MovimientoForm({
     setParaAgregar(null);
     setDatosCp(null);
     setMensajeCp(null);
+    setDudasFoto(null);
     if (inputCpRef.current) inputCpRef.current.value = "";
+    if (inputFotoRef.current) inputFotoRef.current.value = "";
   }
 
   // Aplica los datos ya leídos de una CP a los campos del formulario,
@@ -526,7 +532,7 @@ export default function MovimientoForm({
     if (faltantes.length > 0) {
       setMensajeCp({
         tipo: "error",
-        texto: `Se completó lo que se pudo leer, pero faltó en el PDF: ${faltantes.join(", ")}. Completalo a mano.`,
+        texto: `Se completó lo que se pudo leer, pero faltó en la CP: ${faltantes.join(", ")}. Completalo a mano.`,
       });
     } else {
       setMensajeCp({ tipo: "ok", texto: "Datos de la CP cargados. Revisalos antes de guardar." });
@@ -594,9 +600,38 @@ export default function MovimientoForm({
     };
   }, [numeroCp, tipo]);
 
+  async function handleLeerFoto(archivo: File, tipoActual: Tipo) {
+    setLeyendoCp(true);
+    setMensajeCp(null);
+    setDudasFoto(null);
+    setProgresoFoto("Preparando la foto…");
+    try {
+      const { leerFotoCp } = await import("@/lib/ocrCpFoto");
+      const datos = await leerFotoCp(archivo, setProgresoFoto);
+      if (!datos.numeroCpe && !datos.pesoNetoCargaKg && !datos.patente) {
+        setMensajeCp({
+          tipo: "error",
+          texto: "No se pudo leer la foto. Probá de nuevo: hoja entera, derecha, de frente y con buena luz (sin sombra ni flash).",
+        });
+        return;
+      }
+      productorAMano.current = false;
+      setDatosCp(datos);
+      aplicarDatosCp(datos, tipoActual);
+      setDudasFoto(datos.dudas);
+    } catch (e) {
+      setMensajeCp({ tipo: "error", texto: `No se pudo leer la foto: ${(e as Error).message}` });
+    } finally {
+      setLeyendoCp(false);
+      setProgresoFoto(null);
+      if (inputFotoRef.current) inputFotoRef.current.value = "";
+    }
+  }
+
   async function handleLeerCp(archivo: File, tipoActual: Tipo) {
     setLeyendoCp(true);
     setMensajeCp(null);
+    setDudasFoto(null);
     try {
       const formData = new FormData();
       formData.append("archivo", archivo);
@@ -805,22 +840,48 @@ export default function MovimientoForm({
     return (
       <div className="border border-dashed border-gray-300 rounded-md p-3 bg-gray-50">
         <label className="block text-sm text-gray-600 mb-1">
-          Cargar Carta de Porte (PDF, opcional)
+          Cargar Carta de Porte (PDF o foto, opcional)
         </label>
-        <input
-          ref={inputCpRef}
-          type="file"
-          accept="application/pdf"
-          disabled={leyendoCp}
-          onChange={(e) => {
-            const archivo = e.target.files?.[0];
-            if (archivo) {
-              handleLeerCp(archivo, tipo);
-            }
-          }}
-          className="text-sm"
-        />
-        {leyendoCp && <p className="text-xs text-gray-500 mt-1">Leyendo PDF…</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            ref={inputCpRef}
+            type="file"
+            accept="application/pdf"
+            disabled={leyendoCp}
+            onChange={(e) => {
+              const archivo = e.target.files?.[0];
+              if (archivo) {
+                handleLeerCp(archivo, tipo);
+              }
+            }}
+            className="text-sm"
+          />
+          <label
+            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md border text-sm ${
+              leyendoCp ? "opacity-50 cursor-not-allowed" : "cursor-pointer bg-white hover:bg-gray-100 border-gray-300"
+            }`}
+          >
+            📷 Sacar foto de la CP
+            <input
+              ref={inputFotoRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={leyendoCp}
+              onChange={(e) => {
+                const archivo = e.target.files?.[0];
+                if (archivo) handleLeerFoto(archivo, tipo);
+              }}
+              className="hidden"
+            />
+          </label>
+        </div>
+        {leyendoCp && <p className="text-xs text-gray-500 mt-1">{progresoFoto ?? "Leyendo PDF…"}</p>}
+        {!leyendoCp && !datosCp && (
+          <p className="text-xs text-gray-400 mt-1">
+            Foto: hoja entera, derecha y de frente, con buena luz. Se lee en el mismo dispositivo, sin costo.
+          </p>
+        )}
         {mensajeCp && (
           <p
             className={`text-xs mt-1 ${
@@ -829,6 +890,20 @@ export default function MovimientoForm({
           >
             {mensajeCp.texto}
           </p>
+        )}
+        {dudasFoto && (
+          <div className="mt-2 rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+            <p className="font-medium">
+              📷 Leído de una foto: revisá número de CP, kilos, patente y fecha antes de guardar.
+            </p>
+            {dudasFoto.length > 0 && (
+              <ul className="list-disc ml-4 mt-1 space-y-0.5">
+                {dudasFoto.map((d) => (
+                  <li key={d}>{d}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
     );
