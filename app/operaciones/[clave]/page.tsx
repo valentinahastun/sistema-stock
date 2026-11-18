@@ -17,6 +17,7 @@ import {
   anticipoAuto,
   ipAuto,
   listaDe,
+  esTerrestre,
   enPalabras,
   etapas,
   estaHecho,
@@ -56,6 +57,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
   const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso, a]));
 
   const lista = pasos(o);
+  const terrestre = esTerrestre(o);
   let ultimoHecho = -1;
   lista.forEach((p, i) => {
     if (estaHecho(o, p.codigo, hechos)) ultimoHecho = i;
@@ -115,16 +117,26 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
           <Dato t="Destino" v={o.destino} />
           <Dato t="Producto" v={[o.producto, o.tn ? `${Number(o.tn)} tn` : null].filter(Boolean).join(" · ")} />
           <Dato t="Condición de pago" v={o.payment_terms} />
-          <Dato t="Tipo de BL" v={o.tipo_bl} />
-          <Dato t="Booking" v={o.booking} />
-          <Dato t="Dónde se carga" v={o.lugar_carga} />
-          <Dato t="Carga en planta" v={fecha(o.fecha_carga_planta, true)} />
-          <Dato t="Depósito" v={o.deposito} />
-          <Dato t="Consolidado previsto" v={fecha(o.fecha_consolidado, true)} />
-          <Dato t="Corte documental" v={fecha(o.corte_documental, true)} />
-          <Dato t="ETD" v={fecha(o.etd, true)} />
-          <Dato t="ETA" v={fecha(o.eta, true)} />
-          <Dato t="Contenedores" v={o.contenedores} wide />
+          {terrestre ? (
+            <>
+              <Dato t="Transporte" v="Terrestre (sin BL)" />
+              <Dato t="Dónde se carga" v={o.lugar_carga} />
+              <Dato t="Carga en planta" v={fecha(o.fecha_carga_planta, true)} />
+            </>
+          ) : (
+            <>
+              <Dato t="Tipo de BL" v={o.tipo_bl} />
+              <Dato t="Booking" v={o.booking} />
+              <Dato t="Dónde se carga" v={o.lugar_carga} />
+              <Dato t="Carga en planta" v={fecha(o.fecha_carga_planta, true)} />
+              <Dato t="Depósito" v={o.deposito} />
+              <Dato t="Consolidado previsto" v={fecha(o.fecha_consolidado, true)} />
+              <Dato t="Corte documental" v={fecha(o.corte_documental, true)} />
+              <Dato t="ETD" v={fecha(o.etd, true)} />
+              <Dato t="ETA" v={fecha(o.eta, true)} />
+              <Dato t="Contenedores" v={o.contenedores} wide />
+            </>
+          )}
         </dl>
         <RecuadroCalidad calidad={calidad.get(cvDeOperacion(o) ?? "")} />
         <ResumenArribos cv={cvDeOperacion(o)} />

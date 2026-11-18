@@ -87,7 +87,13 @@ export default function TablaOperaciones({ filas }: { filas: FilaOperacion[] }) 
                           }
                         />
                       )}
-                      <Punto estado={e.estado} alerta={!!vencida} nombre={e.nombre} />
+                      {e.total === 0 ? (
+                        <span className="relative z-10 text-slate-300 text-xs bg-white px-0.5" title={e.nombre + ": no aplica"}>
+                          —
+                        </span>
+                      ) : (
+                        <Punto estado={e.estado} alerta={!!vencida} nombre={e.nombre} />
+                      )}
                     </div>
                   </td>
                 ))}

@@ -64,6 +64,12 @@ export const ipAuto = (o: Operacion) =>
   /(pakist|karachi|filipin|manila|venezuel|cabello|colombia|buenaventura|cartagena)/i.test(o.destino ?? "");
 export const pideIp = (o: Operacion) => o.pide_ip ?? ipAuto(o);
 
+// Terrestres a Chile y Uruguay: no llevan booking, contenedores ni BL. Van
+// directo a originales (fito, CO, factura, MIC/CRT y PL), cruce y descarga.
+// Tiene que coincidir con op_es_terrestre() en supabase/0033_terrestres.sql.
+export const RE_TERRESTRE = /(chile|santiago|longav|uruguay|montevideo)/i;
+export const esTerrestre = (o: { destino: string | null }) => RE_TERRESTRE.test(o.destino ?? "");
+
 export const esCopyDocs = (o: Operacion) => /cop/i.test(o.payment_terms ?? "");
 
 // BL telex o impreso en destino: el BL se libera recién cuando paga el cliente.
@@ -91,6 +97,14 @@ export function drafts(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
 
 // Documentos originales. Se guardan en DOCUS EXPO > Docus Definitivos.
 export function documentos(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
+  if (esTerrestre(o))
+    return [
+      { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
+      { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
+      { codigo: "doc_factura", nombre: "Factura Argreen" },
+      { codigo: "doc_crt", nombre: "MIC/DTA y CRT" },
+      { codigo: "doc_pl", nombre: "Packing list" },
+    ];
   const lista: Paso[] = [
     { codigo: "doc_peso", nombre: "Peso y calidad (ISB)" },
     { codigo: "doc_fumigacion", nombre: "Fumigación (ISB)" },
@@ -107,10 +121,31 @@ export function documentos(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
 
 // Los dos pasos que son una lista de documentos
 export function listaDe(o: Operacion, codigo: string, hechos?: Map<string, Hito>): Paso[] | null {
-  return codigo === "drafts" ? drafts(o, hechos) : codigo === "originales" ? documentos(o, hechos) : null;
+  return codigo === "drafts" && !esTerrestre(o) ? drafts(o, hechos) : codigo === "originales" ? documentos(o, hechos) : null;
+}
+
+// Terrestre (Chile / Uruguay): la operatoria es más corta, sin drafts.
+function pasosTerrestre(o: Operacion): Paso[] {
+  const lista: Paso[] = [
+    { codigo: "firma", nombre: "Contrato firmado" },
+    { codigo: "etiqueta", nombre: "Etiqueta aprobada", ayuda: "Al menos 2 días antes de la carga en planta" },
+  ];
+  if (conAnticipo(o)) lista.push({ codigo: "anticipo", nombre: "Anticipo cobrado" });
+  if (pideIp(o)) lista.push({ codigo: "ip", nombre: "IP emitido" });
+  lista.push(
+    { codigo: "proforma", nombre: "Proforma y apertura de embarque enviadas", ayuda: "Alerta el día antes de la carga en planta" },
+    { codigo: "pe", nombre: "PE oficializado", ayuda: "Fecha de oficialización en SEGUIMIENTO (col. AB)" },
+    { codigo: "camiones", nombre: "Camiones cargados" },
+    { codigo: "originales", nombre: "Originales completos", ayuda: "Fito, CO, factura, MIC/CRT y PL" },
+    { codigo: "cruce", nombre: "Cruce OK" },
+    { codigo: "descarga", nombre: "Descarga en destino" },
+    { codigo: "cobranza", nombre: "Cobranza" },
+  );
+  return lista;
 }
 
 export function pasos(o: Operacion): Paso[] {
+  if (esTerrestre(o)) return pasosTerrestre(o);
   const lista: Paso[] = [
     { codigo: "firma", nombre: "Contrato firmado" },
     { codigo: "etiqueta", nombre: "Etiqueta aprobada", ayuda: "Al menos 2 días antes de la carga en planta" },
@@ -173,7 +208,7 @@ export const ETAPAS: Etapa[] = [
   { codigo: "reserva", nombre: "Reserva del booking", icono: "📅", pasos: ["booking"] },
   { codigo: "carga", nombre: "Carga", icono: "🚛", pasos: ["proforma", "pe", "camiones", "retiro", "consolidado", "ddee_recibida", "ddee_enviada", "ddee_aprobada"] },
   { codigo: "documentos", nombre: "Drafts", icono: "📄", pasos: ["drafts", "draft_enviado", "draft_aprobado"] },
-  { codigo: "originales", nombre: "Originales, flete y BL", icono: "🚢", pasos: ["originales", "flete", "liberacion_bl"] },
+  { codigo: "originales", nombre: "Originales, flete y BL", icono: "🚢", pasos: ["originales", "flete", "liberacion_bl", "cruce", "descarga"] },
   { codigo: "cobro", nombre: "Envío y cobro", icono: "💰", pasos: ["envio_docs", "cobranza"] },
 ];
 
@@ -198,6 +233,8 @@ export const EN_CURSO: Record<string, string> = {
   originales: "Faltan documentos originales",
   flete: "Falta pagar el flete",
   liberacion_bl: "Falta que liberen el BL",
+  cruce: "Esperando que el camión cruce la frontera",
+  descarga: "Esperando la descarga en destino",
   envio_docs: "Falta enviar los documentos",
   cobranza: "Esperando el cobro",
 };
@@ -208,6 +245,7 @@ export function etapas(o: Operacion, hechos: Map<string, Hito>) {
   const aplican = new Set(pasos(o).map((p) => p.codigo));
   const actual = pasoActual(o, hechos);
   const alCobrar = liberaAlCobrar(o);
+  const terrestre = esTerrestre(o);
   const lista = ETAPAS.map((e) => {
     // Con telex o impreso en destino la liberación del BL pasa a la última etapa
     const propios =
@@ -216,7 +254,8 @@ export function etapas(o: Operacion, hechos: Map<string, Hito>) {
       : e.pasos;
     const ps = propios.filter((p) => aplican.has(p));
     const listos = ps.filter((p) => estaHecho(o, p, hechos)).length;
-    return { ...e, ps, total: ps.length, listos };
+    const nombre = terrestre && e.codigo === "originales" ? "Originales, cruce y descarga" : e.nombre;
+    return { ...e, nombre, ps, total: ps.length, listos };
   });
   const iActual = actual ? lista.findIndex((e) => e.ps.includes(actual.codigo)) : lista.length;
   return lista.map(({ ps: _ps, ...e }, i) => ({
@@ -258,6 +297,9 @@ export const PASOS_MARCABLES: Paso[] = [
   { codigo: "originales", nombre: "Originales completos" },
   { codigo: "flete", nombre: "Pago de flete" },
   { codigo: "liberacion_bl", nombre: "Liberación del BL" },
+  { codigo: "doc_crt", nombre: "MIC/DTA y CRT (terrestre)" },
+  { codigo: "cruce", nombre: "Cruce OK (terrestre)" },
+  { codigo: "descarga", nombre: "Descarga en destino (terrestre)" },
   { codigo: "envio_docs", nombre: "Envío de documentos" },
   { codigo: "cobranza", nombre: "Cobranza" },
 ];
