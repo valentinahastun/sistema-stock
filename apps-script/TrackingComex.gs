@@ -837,7 +837,11 @@ function soloDraftBl(m) {
 
 function esAdjuntoDraftBl(nombre) {
   const n = String(nombre).toLowerCase();
-  return /draft/.test(n) && /(^|[^a-z])b\/?l([^a-z]|$)/.test(n);
+  if (!/draft|borrador/.test(n)) return false;
+  if (/(^|[^a-z])b\/?l([^a-z]|$)/.test(n)) return true;
+  // "DRAFT BUE600240100.pdf": el draft del BL con el número de booking o de BL, sin decir "BL"
+  const resto = String(nombre).replace(/\.pdf$/i, '').replace(/\(\d+\)/g, '').replace(/draft|borrador|\bde\b|\bdel\b/gi, '').replace(/[\s_.-]+$|^[\s_.-]+/g, '').trim();
+  return CODIGO_BL.test(resto + '.pdf');
 }
 
 // "CV 26-116 // MC26668" -> {cv:'26-116', lote:''}; "CV 26-115 A // ..." -> lote 'A'
