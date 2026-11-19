@@ -801,10 +801,15 @@ function analizarMensajes(msgs, terrestres) {
     // 1: drafts de documentos enviados al cliente. Si va solo el draft de BL no cuenta:
     //    tiene que ir algún otro borrador (origen, prefito, ...) o 3 adjuntos o más.
     const drafts = m.adjuntos.filter(esAdjuntoDraft);
-    const juego = drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length && m.adjuntos.length >= 3);
+    // También cuenta si el mail dice "drafts" y lleva 2 o más documentos (aunque los
+    // archivos no digan "draft": "279800055_VerifyCopy.pdf", "Certificado de Peso…", la factura E, el PL)
+    const docs = m.adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a) && esAdjuntoDocumento(a));
+    const sinImagenes = m.adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a));
+    const juego = drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length && sinImagenes.length >= 3) ||
+      (/\b(drafts?|borradores)\b/i.test(m.texto || '') && docs.length >= 2 && docs.some(a => !esAdjuntoDraftBl(a)));
     if (delEquipo(m) && juego && m.para.some(esCliente)) {
       const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
-      const cual = m.adjuntos.filter(esAdjuntoDraft)[0];
+      const cual = m.adjuntos.filter(esAdjuntoDraft)[0] || docs[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
         : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
     }
@@ -844,8 +849,14 @@ function soloDraftBl(m) {
   return /draft\s+(del\s+|de\s+)?b\/?l\b/.test(t) && !/drafts\b/.test(t);
 }
 
+// Archivo que parece un documento de exportación (draft u original)
+function esAdjuntoDocumento(nombre) {
+  return esAdjuntoDraft(nombre) || /verify\s*copy|solicitud(es)?\s*de\s*certificados?|certificado\s+de\s+(peso|calidad|origen)|quality|weight|fumigat|fumigaci|packing|^pl\b|^\d{11}_019_|origen|(^|[^a-z])(co|bl|gmo)([^a-z]|$)|\.docx?$/i.test(String(nombre));
+}
+
 function esAdjuntoDraftBl(nombre) {
   const n = String(nombre).toLowerCase();
+  if (/verify\s*copy/.test(n)) return true;            // draft de BL de Maersk ("279800055_VerifyCopy.pdf")
   if (!/draft|borrador/.test(n)) return false;
   if (/(^|[^a-z])b\/?l([^a-z]|$)/.test(n)) return true;
   // "DRAFT BUE600240100.pdf": el draft del BL con el número de booking o de BL, sin decir "BL"
