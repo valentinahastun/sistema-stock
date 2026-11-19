@@ -298,6 +298,7 @@ export const PASOS_MARCABLES: Paso[] = [
   { codigo: "flete", nombre: "Pago de flete" },
   { codigo: "liberacion_bl", nombre: "Liberación del BL" },
   { codigo: "doc_crt", nombre: "MIC/DTA y CRT (terrestre)" },
+  { codigo: "bl_a_isb", nombre: "Draft del BL enviado a ISB" },
   { codigo: "cruce", nombre: "Cruce OK (terrestre)" },
   { codigo: "descarga", nombre: "Descarga en destino (terrestre)" },
   { codigo: "envio_docs", nombre: "Envío de documentos" },

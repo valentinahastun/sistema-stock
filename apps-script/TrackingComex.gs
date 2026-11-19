@@ -327,6 +327,7 @@ function mailDiario() {
 
 // Qué hay que hacer con cada alerta, en el orden en que conviene resolverlas.
 const TAREAS = [
+  { paso: 'draft_isb', titulo: 'Drafts de ISB', icono: '🧾' },
   { paso: 'draft_enviado', titulo: 'Mandar drafts al cliente', icono: '📤' },
   { paso: 'draft_aprobado', titulo: 'Consultar aprobación de drafts', icono: '📄' },
   { paso: 'originales', titulo: 'Reclamar originales', icono: '📦' },
@@ -515,6 +516,7 @@ function leerMails() {
     equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque"} ' + despues,
     // Terrestres: lo que va y viene con All Bridges (despachante) y las novedades del transporte
     equipo + ' to:allbridges.com.ar has:attachment ' + despues,
+    equipo + ' to:isbargentina.com.ar has:attachment ' + despues,
     equipo + ' has:attachment subject:CV {destino chile santiago uruguay montevideo} ' + despues,
     'from:allbridges.com.ar has:attachment ' + despues,
     '-from:argreen.com.ar {cruzo cruzó cruzaron "aduana de los andes" descargado descargada descargó conformes} ' + despues,
@@ -694,6 +696,13 @@ function analizarMensajes(msgs, terrestres) {
       add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma y apertura de embarque enviadas a All Bridges' : 'Proforma a All Bridges sin CV en el asunto');
     }
     reglasTerrestres(m, cvMail, add, delEquipo, terrestres);
+
+    // Draft del BL mandado a ISB para que haga sus drafts (peso y calidad, fumigación)
+    if (delEquipo(m) && m.para.some(e => /isbargentina/i.test(e)) &&
+        ((m.adjuntos || []).some(a => esAdjuntoDraftBl(a) || CODIGO_BL.test(a) || /(^|[^a-z])b\/?l([^a-z]|$)/i.test(a)) ||
+         /adjunto\s+(el\s+)?(draft\s+(del?\s+)?)?b\/?l\b|drafts?\s+correspondientes/i.test(sinAcentos(m.texto || '')))) {
+      add(m, 'bl_a_isb', cvMail, !!cvMail, cvMail ? 'Draft del BL enviado a ISB' : 'BL enviado a ISB sin CV en el asunto');
+    }
 
     // 10: DDEE. Reymar la manda (después del consolidado), se reenvía al cliente y se aprueba
     //     ("DDEE ok", "proceder con draft", "lo veo ok", "adjunto DDEE definitiva", "tomar como válida la DDEE de este correo")

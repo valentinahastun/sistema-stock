@@ -54,7 +54,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
   ((hitosData ?? []) as Hito[]).forEach((h) => hechos.set(h.paso, h));
   const alertas = ((alertasData ?? []) as Alerta[]).filter((a) => a.clave === clave);
   // La alerta de GMO se muestra en "Originales completos"
-  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso, a]));
+  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso === "draft_isb" ? "drafts" : a.paso, a]));
 
   const lista = pasos(o);
   const terrestre = esTerrestre(o);
@@ -237,6 +237,26 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                             );
                           })}
                         </ul>
+                        {p.codigo === "drafts" && !h && (() => {
+                          const hi = hechos.get("bl_a_isb");
+                          return (
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-200 flex flex-wrap items-center gap-2 text-sm">
+                              <span className={hi ? "text-emerald-600" : "text-slate-300"}>{hi ? "✓" : "○"}</span>
+                              {hi?.mail_url ? (
+                                <a href={hi.mail_url} target="_blank" rel="noreferrer" className="hover:underline">
+                                  Draft del BL enviado a ISB
+                                </a>
+                              ) : (
+                                <span className={hi ? "text-slate-700" : "text-slate-400"}>Draft del BL enviado a ISB</span>
+                              )}
+                              {hi?.fecha && <span className="text-xs text-slate-400">{fecha(hi.fecha)}</span>}
+                              {!hi && <span className="text-xs text-slate-400">para que ISB haga sus drafts</span>}
+                              {puedeEditar && (
+                                <PasoEditable clave={o.clave} paso="bl_a_isb" hecho={!!hi} fechaActual={hi?.fecha ?? null} detalleActual={hi?.detalle ?? null} compacto />
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })()}

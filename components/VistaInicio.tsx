@@ -11,6 +11,7 @@ const GRUPOS: { paso: string; titulo: string; icono: string }[] = [
   { paso: "anticipo", titulo: "Anticipos por cobrar", icono: "💵" },
   { paso: "ip", titulo: "IP por emitir", icono: "📑" },
   { paso: "retiro", titulo: "Calidad sin Apto", icono: "🧪" },
+  { paso: "draft_isb", titulo: "Drafts de ISB", icono: "🧾" },
   { paso: "draft_enviado", titulo: "Drafts para mandar al cliente", icono: "📤" },
   { paso: "draft_aprobado", titulo: "Consultar aprobación de drafts", icono: "📄" },
   { paso: "originales", titulo: "Originales pendientes", icono: "📦" },
