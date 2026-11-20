@@ -44,6 +44,9 @@ const CONFIG = {
          etd: 'AO', eta: 'AP', cobro: 'AX' },
   FLE: { hoja: 'PAGOS FLETES', fila: 9, cv: 'B', estado: 'M' },
   COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', anticipo: 'I', estado: 'N' },
+  // Solapa ANALISIS: un bloque por operación (col. A combinada con el CV), resultados de ISB en C
+  // y las modificaciones en D. Sin las modificaciones no se pueden mandar los drafts.
+  ANA: { hoja: 'ANALISIS', fila: 2, cv: 'A', resultado: 'C', modif: 'D' },
   // PROYECCION CARGAS: las columnas se buscan por el título de la fila 4 (las dos
   // solapas no tienen exactamente las mismas columnas).
   PRO: { hojas: { 'Cargas Lu': 'lourdes', 'Cargas Vale': 'valentina' }, filaTitulos: 4,
@@ -162,6 +165,7 @@ function leerTodo() {
     seguimiento: leer(seg, CONFIG.SEG.hoja, CONFIG.SEG.fila),
     fletes: leer(seg, CONFIG.FLE.hoja, CONFIG.FLE.fila),
     cobranzas: leer(seg, CONFIG.COB.hoja, CONFIG.COB.fila),
+    analisis: (() => { try { return leer(seg, CONFIG.ANA.hoja, CONFIG.ANA.fila); } catch (e) { Logger.log(e.message); return []; } })(),
     proyeccion,
     hoy: new Date(),
   };
@@ -310,6 +314,31 @@ function armarDatos(t) {
     if (k && ops[k] && /pagad/i.test(String(f[col(F.estado)]))) hito(k, 'flete', null, 'pagos_fletes');
   });
 
+  // --- ANALISIS: análisis de ISB cargado y si ya tiene las modificaciones (col. D)
+  const A = CONFIG.ANA;
+  const bloques = {};
+  let bloqueActual = null;
+  (t.analisis || []).forEach(f => {
+    const cab = txt(f[col(A.cv)]);
+    if (cab) {
+      const c = cvDeAsunto(cab);
+      bloqueActual = c ? c.cv + c.lote : null;
+      if (bloqueActual && !bloques[bloqueActual]) bloques[bloqueActual] = { resultado: false, modif: '' };
+    }
+    if (!bloqueActual) return;
+    if (txt(f[col(A.resultado)])) bloques[bloqueActual].resultado = true;
+    const mod = txt(f[col(A.modif)]);
+    if (mod && !bloques[bloqueActual].modif) bloques[bloqueActual].modif = mod;
+  });
+  Object.keys(bloques).forEach(b => {
+    // "26-081" sin lote vale para todos los lotes abiertos de ese CV
+    const claves = ops[b] ? [b] : Object.keys(ops).filter(k => b.length === 6 && k.slice(0, 6) === b);
+    claves.forEach(k => {
+      if (bloques[b].resultado) hito(k, 'analisis_isb', null, 'seguimiento', 'Análisis de ISB en la solapa ANALISIS');
+      if (bloques[b].modif) hito(k, 'analisis_modif', null, 'seguimiento', 'Modificaciones: ' + bloques[b].modif.slice(0, 80));
+    });
+  });
+
   return { ops: Object.keys(ops).map(k => ops[k]), hitos };
 }
 
@@ -328,6 +357,7 @@ function mailDiario() {
 // Qué hay que hacer con cada alerta, en el orden en que conviene resolverlas.
 const TAREAS = [
   { paso: 'draft_isb', titulo: 'Drafts de ISB', icono: '🧾' },
+  { paso: 'analisis_modif', titulo: 'Modificaciones del análisis', icono: '🔬' },
   { paso: 'draft_enviado', titulo: 'Mandar drafts al cliente', icono: '📤' },
   { paso: 'draft_aprobado', titulo: 'Consultar aprobación de drafts', icono: '📄' },
   { paso: 'originales', titulo: 'Reclamar originales', icono: '📦' },

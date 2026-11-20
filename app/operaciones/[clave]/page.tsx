@@ -54,7 +54,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
   ((hitosData ?? []) as Hito[]).forEach((h) => hechos.set(h.paso, h));
   const alertas = ((alertasData ?? []) as Alerta[]).filter((a) => a.clave === clave);
   // La alerta de GMO se muestra en "Originales completos"
-  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso === "draft_isb" ? "drafts" : a.paso, a]));
+  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso === "draft_isb" || a.paso === "analisis_modif" ? "drafts" : a.paso, a]));
 
   const lista = pasos(o);
   const terrestre = esTerrestre(o);
@@ -237,6 +237,23 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                             );
                           })}
                         </ul>
+                        {p.codigo === "drafts" && !h && (() => {
+                          const ha = hechos.get("analisis_isb");
+                          const hm = hechos.get("analisis_modif");
+                          if (!ha && !hm) return null;
+                          return (
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-200 flex flex-wrap items-center gap-2 text-sm">
+                              <span className={hm ? "text-emerald-600" : "text-slate-300"}>{hm ? "✓" : "○"}</span>
+                              <span className={hm ? "text-slate-700" : "text-slate-400"} title={hm?.detalle ?? ""}>
+                                Modificaciones del análisis de ISB
+                              </span>
+                              {!hm && <span className="text-xs text-slate-400">falta (solapa ANALISIS, columna D)</span>}
+                              {puedeEditar && (
+                                <PasoEditable clave={o.clave} paso="analisis_modif" hecho={!!hm} fechaActual={hm?.fecha ?? null} detalleActual={hm?.detalle ?? null} compacto />
+                              )}
+                            </div>
+                          );
+                        })()}
                         {p.codigo === "drafts" && !h && (() => {
                           const hi = hechos.get("bl_a_isb");
                           return (
