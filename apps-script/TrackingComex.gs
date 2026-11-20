@@ -295,8 +295,8 @@ function armarDatos(t) {
     if (s && esFecha(s[col(S.carga)])) hito(k, 'camiones', s[col(S.carga)], 'seguimiento');
     if (o.contenedores) hito(k, 'retiro', null, 'seguimiento', o.contenedores);
     if (s && esFecha(s[col(S.consolidado)])) hito(k, 'consolidado', s[col(S.consolidado)], 'seguimiento');
-    const nProforma = txt(s && s[col(S.proforma)]);
-    if (nProforma && nProforma !== '-') hito(k, 'proforma', null, 'seguimiento', 'Proforma ' + nProforma);
+    // La proforma NO se toma de la planilla (col. G): el número puede estar cargado
+    // sin que se haya mandado. Se marca solo con el mail a Reymar / All Bridges.
     // Columna AB: fecha de oficialización del PE (permiso de embarque)
     if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'pe', s[col(S.fechaOfi)], 'seguimiento', 'PE oficializado');
     if (s && esFecha(s[col(S.cobro)])) hito(k, 'cobranza', s[col(S.cobro)], 'seguimiento');
@@ -513,7 +513,7 @@ function leerMails() {
     equipo + ' subject:apertura subject:cobranza ' + despues,
     '-from:argreen.com.ar {approved aprobados aprobado ok "proceder con" "proceed to the originals" "proceed with the originals"} ' + despues,
     // Proforma / datos del PE que mandan a Reymar, y la DDEE (Reymar la manda, se reenvía al cliente y se aprueba)
-    equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque"} ' + despues,
+    equipo + ' to:reymar.com.ar {subject:proforma subject:PE subject:"apertura de embarque" filename:proforma} ' + despues,
     // Terrestres: lo que va y viene con All Bridges (despachante) y las novedades del transporte
     equipo + ' to:allbridges.com.ar has:attachment ' + despues,
     equipo + ' to:isbargentina.com.ar has:attachment ' + despues,
@@ -687,7 +687,8 @@ function analizarMensajes(msgs, terrestres) {
 
     // 9: proforma / datos para oficializar el PE: "PROFORMA CV 26-131 ...", "CV 26-113 PROFORMA ...", "PE CV 26-132 ..."
     if (delEquipo(m) && m.para.some(e => /reymar/i.test(e)) &&
-        (/\bproforma\b|apertura\s+de\s+embarque/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto))) {
+        (/\bproforma\b|apertura\s+de\s+embarque/i.test(m.asunto) || /^\s*((re|rv|fw|fwd)\s*:\s*)*pe\b/i.test(m.asunto) ||
+         (m.adjuntos || []).some(a => /proforma/i.test(a)))) {
       add(m, 'proforma', cvMail, !!cvMail, cvMail ? 'Proforma enviada a Reymar' : 'Proforma enviada sin CV en el asunto');
     }
     // Terrestres: proforma y apertura de embarque adjuntas en el mail a All Bridges
