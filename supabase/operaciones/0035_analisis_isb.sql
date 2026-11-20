@@ -158,7 +158,7 @@ as $$
     -- rojo desde el día siguiente (el draft del BL suele llegar antes, no sirve de referencia).
     select o.*, 'analisis_modif',
       case when o.hoy - coalesce(o.f_analisis, o.hoy) >= 1 then 'vencida' else 'proxima' end,
-      'Faltan las modificaciones del análisis de ISB (solapa ANALISIS, columna D): sin eso no se pueden mandar los drafts',
+      'Faltan las modificaciones del análisis de ISB',
       coalesce(o.f_analisis, o.hoy) + 1, true, o.url_cv
     from o where not o.terrestre and o.analisis_isb and not o.analisis_modif
       and not o.draft_env and not o.draft_ok and not o.originales
