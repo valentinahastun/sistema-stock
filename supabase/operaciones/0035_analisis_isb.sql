@@ -63,6 +63,8 @@ as $$
       (select fecha from op_hitos h where h.clave = op.clave and h.paso = 'bl_a_isb') as f_bl_isb,
       -- Solapa ANALISIS de la planilla: análisis de ISB cargado y sus modificaciones (col. D)
       exists (select 1 from op_hitos h where h.clave = op.clave and h.paso = 'analisis_isb') as analisis_isb,
+      -- fecha en que el robot vio el análisis por primera vez en la solapa
+      (select fecha from op_hitos h where h.clave = op.clave and h.paso = 'analisis_isb') as f_analisis,
       exists (select 1 from op_hitos h where h.clave = op.clave and h.paso = 'analisis_modif') as analisis_modif,
       (select count(distinct h.paso) from op_hitos h where h.clave = op.clave
         and h.paso in ('dr_co', 'dr_fito', 'dr_bl', 'dr_pl', 'dr_factura')) = 5 as otros_drafts,
@@ -152,11 +154,12 @@ as $$
     union all
     -- Consultar aprobación: todos los días desde que se mandaron hasta que se aprueban
     -- Análisis de ISB cargado en la solapa ANALISIS pero sin las modificaciones (col. D):
-    -- sin eso no se pueden mandar los drafts. Rojo cuando ya llegó el draft del BL.
+    -- sin eso no se pueden mandar los drafts. Amarillo el día que se carga el análisis,
+    -- rojo desde el día siguiente (el draft del BL suele llegar antes, no sirve de referencia).
     select o.*, 'analisis_modif',
-      case when o.f_draft_bl is not null then 'vencida' else 'proxima' end,
+      case when o.hoy - coalesce(o.f_analisis, o.hoy) >= 1 then 'vencida' else 'proxima' end,
       'Faltan las modificaciones del análisis de ISB (solapa ANALISIS, columna D): sin eso no se pueden mandar los drafts',
-      coalesce(o.f_draft_bl, o.hoy), true, o.url_cv
+      coalesce(o.f_analisis, o.hoy) + 1, true, o.url_cv
     from o where not o.terrestre and o.analisis_isb and not o.analisis_modif
       and not o.draft_env and not o.draft_ok and not o.originales
     union all
