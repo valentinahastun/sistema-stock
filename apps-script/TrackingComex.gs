@@ -33,6 +33,8 @@ const CONFIG = {
   EXCLUIR_DESTINOS: ['iguaz', 'brasil', 'fray bentos', 'argentina'],
   // Terrestres (igual que op_es_terrestre en Supabase y esTerrestre en la plataforma)
   TERRESTRE: /(chile|santiago|longav|uruguay|montevideo)/i,
+  // Argelia: control de carga de Control Union (no ISB) y fumigación de Biofix
+  CU: /(argel|alger|bejaia|skikda|annaba)/i,
 
   MAIL_DESTINATARIOS: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   HORA_MAIL: 8,
@@ -980,6 +982,11 @@ function textoPropio(body) {
 const CODIGO_BL = /^([A-Z]{3,4}[A-Z0-9]*\d{5,}[A-Z0-9]*|\d{5,10}|\d{8,12}-\d{8,14})(\s*\(\d+\))?\.pdf$/i;
 
 // Peso y calidad (ISB): "Quality & Weight", "Certificado de Peso", "Certificado de Calidad", "Quality report"
+ // Reportes de Control Union (Argelia): uno por contenedor ("01-GLDU952623 4.docx.pdf",
+// "01 - Report Loading Container MSBU3079146.docx.pdf") y los resúmenes de la carga
+const REPORTE_CU = /report\s+loading\s+container|summary\s+of\s+containers|sealing\s+inspection|rejected\s+bags|^\d{2}\s*-\s*[A-Z]{4}\s*\d{6}\s*\d?\b/i;
+const CARPETA_CU = /^\s*reportes?\s*(de\s*)?(cu|control\s*union)\b/i;
+
 const PESO_CALIDAD = /quality.*weight|weight.*quality|certificado\s+de\s+(peso|calidad)|quality\s+report|weight\s+(certificate|report)/i;
 
 // Cada original cuenta también como su draft
@@ -1087,6 +1094,28 @@ function leerCarpetas() {
           }
         }
       });
+      // Argelia: reportes de Control Union, sueltos (en la carpeta o en DOCUS EXPO) o en "REPORTES CU".
+      // Son los definitivos: marcan el draft y el original de "Reportes Control Union".
+      if (CONFIG.CU.test(o.destino || '')) {
+        const dondeBuscar = raices.concat(subcarpetas(base, /docus\s*expo/i));
+        const carpetasCu = [];
+        dondeBuscar.forEach(carp => subcarpetas(carp, CARPETA_CU).forEach(x => carpetasCu.push(x)));
+        let reporte = null;
+        carpetasCu.forEach(carp => {
+          const fs = carp.getFiles();
+          if (!reporte && fs.hasNext()) reporte = fs.next();
+        });
+        dondeBuscar.forEach(carp => {
+          const fs = carp.getFiles();
+          while (!reporte && fs.hasNext()) {
+            const a = fs.next();
+            if (REPORTE_CU.test(a.getName())) reporte = a;
+          }
+        });
+        if (reporte) ['dr_peso', 'doc_peso'].forEach(p => items.push({ clave: o.clave, paso: p,
+          detalle: 'Reportes Control Union: ' + reporte.getName(), url: reporte.getUrl(),
+          fecha: Utilities.formatDate(reporte.getDateCreated(), zona, 'yyyy-MM-dd') }));
+      }
       subcarpetas(base, /docus\s*expo/i).forEach(expo => {
         const sueltos = expo.getFiles();
         while (sueltos.hasNext()) {

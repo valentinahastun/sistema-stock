@@ -18,6 +18,7 @@ import {
   ipAuto,
   listaDe,
   esTerrestre,
+  esControlUnion,
   enPalabras,
   etapas,
   estaHecho,
@@ -254,7 +255,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                             </div>
                           );
                         })()}
-                        {p.codigo === "drafts" && !h && (() => {
+                        {p.codigo === "drafts" && !h && !esControlUnion(o) && (() => {
                           const hi = hechos.get("bl_a_isb");
                           return (
                             <div className="mt-1.5 pt-1.5 border-t border-slate-200 flex flex-wrap items-center gap-2 text-sm">

@@ -70,6 +70,14 @@ export const pideIp = (o: Operacion) => o.pide_ip ?? ipAuto(o);
 export const RE_TERRESTRE = /(chile|santiago|longav|uruguay|montevideo)/i;
 export const esTerrestre = (o: { destino: string | null }) => RE_TERRESTRE.test(o.destino ?? "");
 
+// Argelia: el control de carga lo hace Control Union (reportes por contenedor, sueltos o en la
+// carpeta "REPORTES CU") y la fumigación la hace Biofix, no ISB.
+// Tiene que coincidir con op_es_control_union() en Supabase y CONFIG.CU en el robot.
+export const RE_CONTROL_UNION = /(argel|alger|bejaia|skikda|annaba)/i;
+export const esControlUnion = (o: { destino: string | null }) => RE_CONTROL_UNION.test(o.destino ?? "");
+const quienPeso = (o: Operacion) => (esControlUnion(o) ? "Reportes Control Union" : "Peso y calidad (ISB)");
+const quienFumiga = (o: Operacion) => (esControlUnion(o) ? "Fumigación (Biofix)" : "Fumigación (ISB)");
+
 export const esCopyDocs = (o: Operacion) => /cop/i.test(o.payment_terms ?? "");
 
 // BL telex o impreso en destino: el BL se libera recién cuando paga el cliente.
@@ -83,8 +91,8 @@ export const pideGmo = (hechos?: Map<string, Hito>) =>
 
 export function drafts(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
   return [
-    { codigo: "dr_peso", nombre: "Peso y calidad (ISB)" },
-    { codigo: "dr_fumigacion", nombre: "Fumigación (ISB)" },
+    { codigo: "dr_peso", nombre: quienPeso(o) },
+    { codigo: "dr_fumigacion", nombre: quienFumiga(o) },
     { codigo: "dr_co", nombre: "Certificado de origen (Reymar)" },
     { codigo: "dr_fito", nombre: "Fitosanitario (Reymar)" },
     { codigo: "dr_bl", nombre: "BL (forwarder)" },
@@ -106,8 +114,8 @@ export function documentos(o: Operacion, hechos?: Map<string, Hito>): Paso[] {
       { codigo: "doc_pl", nombre: "Packing list" },
     ];
   const lista: Paso[] = [
-    { codigo: "doc_peso", nombre: "Peso y calidad (ISB)" },
-    { codigo: "doc_fumigacion", nombre: "Fumigación (ISB)" },
+    { codigo: "doc_peso", nombre: quienPeso(o) },
+    { codigo: "doc_fumigacion", nombre: quienFumiga(o) },
     { codigo: "doc_co", nombre: "Certificado de origen (Reymar)" },
     { codigo: "doc_fito", nombre: "Fitosanitario (Reymar)" },
     { codigo: "doc_bl", nombre: "BL fechado (forwarder)" },
