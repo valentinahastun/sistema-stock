@@ -588,6 +588,10 @@ function leerMails() {
       adjuntos: verAdjuntos ? m.getAttachments({ includeInlineImages: false }).map(a => a.getName()) : [],
       url: 'https://mail.google.com/mail/#all/' + m.getId(),
       ddeeHilo,
+      draftsPrevios: MAIL.EQUIPO.indexOf(de) < 0 && APROBACION_CORTA.test((texto.split('\n').find(l => l.trim()) || '').trim())
+        ? todos.some(x => x.getDate() < m.getDate() && MAIL.EQUIPO.indexOf(direcciones(x.getFrom())[0] || '') >= 0 &&
+            esJuegoDrafts(x.getAttachments({ includeInlineImages: false }).map(a => a.getName()), textoPropio(x.getPlainBody() || '')))
+        : false,
     });
     });
   });
@@ -802,7 +806,7 @@ function analizarMensajes(msgs, terrestres) {
 
     // 7: el cliente o broker aprueba los drafts ("Drafts have been approved",
     //    "Proceder con originales"). El CV sale del asunto del hilo.
-    if (esCliente(m.de) && APRUEBA_DRAFTS.test(sinAcentos(m.texto)) &&
+    if (esCliente(m.de) && (APRUEBA_DRAFTS.test(sinAcentos(m.texto)) || m.draftsPrevios) &&
         (!NO_APRUEBA.test(sinAcentos(m.texto)) || PROCEDER_ORIGINALES.test(sinAcentos(m.texto)))) {
       // El CV puede estar solo en el asunto de la respuesta ("RE: CV 26-110 // MC26652 ...")
       const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
@@ -831,14 +835,8 @@ function analizarMensajes(msgs, terrestres) {
 
     // 1: drafts de documentos enviados al cliente. Si va solo el draft de BL no cuenta:
     //    tiene que ir algún otro borrador (origen, prefito, ...) o 3 adjuntos o más.
-    const drafts = m.adjuntos.filter(esAdjuntoDraft);
-    // También cuenta si el mail dice "drafts" y lleva 2 o más documentos (aunque los
-    // archivos no digan "draft": "279800055_VerifyCopy.pdf", "Certificado de Peso…", la factura E, el PL)
     const docs = m.adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a) && esAdjuntoDocumento(a));
-    const sinImagenes = m.adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a));
-    const juego = drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length && sinImagenes.length >= 3) ||
-      (/\b(drafts?|borradores)\b/i.test(m.texto || '') && docs.length >= 2 && docs.some(a => !esAdjuntoDraftBl(a)));
-    if (delEquipo(m) && juego && m.para.some(esCliente)) {
+    if (delEquipo(m) && esJuegoDrafts(m.adjuntos, m.texto) && m.para.some(esCliente)) {
       const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0] || docs[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
@@ -879,6 +877,22 @@ function soloDraftBl(m) {
   if (adj.length) return adj.every(a => esAdjuntoDraftBl(a) || /(^|[^a-z])b\/?l([^a-z]|$)/i.test(a)) && adj.length <= 2;
   return /draft\s+(del\s+|de\s+)?b\/?l\b/.test(t) && !/drafts\b/.test(t);
 }
+
+// ¿El mail lleva el juego de drafts (no solo el del BL)? Cuenta si:
+//  - hay algún draft que no sea el del BL, o un draft y 3 adjuntos o más; o
+//  - el mail dice "drafts" y lleva 2 o más documentos aunque los archivos no digan
+//    "draft" ("279800055_VerifyCopy.pdf", "Certificado de Peso…", la factura E, el PL).
+function esJuegoDrafts(adjuntos, texto) {
+  const drafts = adjuntos.filter(esAdjuntoDraft);
+  const sinImagenes = adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a));
+  const docs = sinImagenes.filter(esAdjuntoDocumento);
+  return drafts.some(a => !esAdjuntoDraftBl(a)) || (drafts.length > 0 && sinImagenes.length >= 3) ||
+    (/\b(drafts?|borradores)\b/i.test(texto || '') && docs.length >= 2 && docs.some(a => !esAdjuntoDraftBl(a)));
+}
+
+// Aprobación corta del cliente, sin decir qué aprueba: "Approved, please proceed.", "OK", "Please proceed".
+// Cuenta como aprobación de drafts solo si antes, en el mismo hilo, les mandamos el juego de drafts.
+const APROBACION_CORTA = /^(?![^\n]*\b(but|pero|change|cambi|correct|corrig|modif|however|except|amend|revise|revis|wrong|error|mistake)\w*)(?:\s*(approved|aprobad[oa]s?|ok(ay)?|confirmed|confirmad[oa]s?|conforme|all\s+(good|ok|fine)|looks\s+good)\b[^\n]{0,60}$|[^\n]*\b(please|pls|plz)\s+proceed\b|[^\n]*\bproceed\s+please\b)/i;
 
 // Archivo que parece un documento de exportación (draft u original)
 function esAdjuntoDocumento(nombre) {
@@ -1215,4 +1229,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { armarCompras, columnasCompras, soloDraftBl, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { esJuegoDrafts, APROBACION_CORTA, armarCompras, columnasCompras, soloDraftBl, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
