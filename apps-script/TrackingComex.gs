@@ -198,7 +198,8 @@ function armarDatos(t) {
     const monto = typeof a === 'number' ? a : Number(String(a || '').replace(/[^\d.-]/g, ''));
     if (monto > 0) anticipo[k] = monto;
     if (/^cobrad/i.test(String(f[col(C.estado)]).trim())) cobrado[k] = true;
-    if (esFecha(f[col(C.cobro)])) fechaCobro[k] = f[col(C.cobro)];
+    // La cobranza se da por hecha solo con el estado COBRADO (col. N); la fecha, si está, de la col. S
+    if (cobrado[k]) fechaCobro[k] = esFecha(f[col(C.cobro)]) ? f[col(C.cobro)] : null;
   });
 
   // --- VENTAS: datos del contrato (puede tener varias líneas por CV)
@@ -305,9 +306,9 @@ function armarDatos(t) {
     // sin que se haya mandado. Se marca solo con el mail a Reymar / All Bridges.
     // Columna AB: fecha de oficialización del PE (permiso de embarque)
     if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'pe', s[col(S.fechaOfi)], 'seguimiento', 'PE oficializado');
-    // Cobranza: "Fecha de Cobro" de COBRANZAS (col. S). Cuando el estado pasa a COBRADO la operación se cierra.
-    const fc = fechaCobro[k] || fechaCobro[k.slice(0, 6)];
-    if (fc) hito(k, 'cobranza', fc, 'cobranzas', 'Fecha de Cobro en COBRANZAS');
+    // Cobranza: estado COBRADO en COBRANZAS (col. N). Si no sigue en Proyección, la operación además se cierra.
+    const ck = k in fechaCobro ? k : (k.slice(0, 6) in fechaCobro ? k.slice(0, 6) : null);
+    if (ck) hito(k, 'cobranza', fechaCobro[ck], 'cobranzas', 'COBRADO en COBRANZAS');
     const ant = anticipo[k] || anticipo[k.slice(0, 6)];
     if (ant) hito(k, 'anticipo', null, 'cobranzas', 'Anticipo en COBRANZAS: ' + ant.toLocaleString('en-US') + ' USD');
   });
