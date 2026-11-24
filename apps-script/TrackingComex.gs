@@ -41,9 +41,9 @@ const CONFIG = {
          buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
   SEG: { hoja: 'SEGUIMIENTO OPERATIVO', fila: 2, resp: 'A', cv: 'D', destino: 'E', deposito: 'F', proforma: 'G', consolidado: 'H',
          carga: 'J', cliente: 'W', fechaOfi: 'AB', booking: 'AH', container: 'AI', tipoBl: 'AK',
-         etd: 'AO', eta: 'AP', cobro: 'AX' },
+         etd: 'AO', eta: 'AP' },   // AX ahora es "Fecha de Factura", no el cobro
   FLE: { hoja: 'PAGOS FLETES', fila: 9, cv: 'B', estado: 'M' },
-  COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', anticipo: 'I', estado: 'N' },
+  COB: { hoja: 'COBRANZAS', fila: 3, cv: 'B', anticipo: 'I', estado: 'N', cobro: 'S' },   // S: Fecha de Cobro
   // Solapa ANALISIS: un bloque por operación (col. A combinada con el CV), resultados de ISB en C
   // y las modificaciones en D. Sin las modificaciones no se pueden mandar los drafts.
   ANA: { hoja: 'ANALISIS', fila: 2, cv: 'A', resultado: 'C', modif: 'D' },
@@ -188,6 +188,7 @@ function armarDatos(t) {
   const cobrado = {};
   const enCobranzas = {};
   const anticipo = {};
+  const fechaCobro = {};
   t.cobranzas.forEach(f => {
     const k = norm(f[col(C.cv)]);
     if (!k) return;
@@ -197,6 +198,7 @@ function armarDatos(t) {
     const monto = typeof a === 'number' ? a : Number(String(a || '').replace(/[^\d.-]/g, ''));
     if (monto > 0) anticipo[k] = monto;
     if (/^cobrad/i.test(String(f[col(C.estado)]).trim())) cobrado[k] = true;
+    if (esFecha(f[col(C.cobro)])) fechaCobro[k] = f[col(C.cobro)];
   });
 
   // --- VENTAS: datos del contrato (puede tener varias líneas por CV)
@@ -303,7 +305,9 @@ function armarDatos(t) {
     // sin que se haya mandado. Se marca solo con el mail a Reymar / All Bridges.
     // Columna AB: fecha de oficialización del PE (permiso de embarque)
     if (s && esFecha(s[col(S.fechaOfi)])) hito(k, 'pe', s[col(S.fechaOfi)], 'seguimiento', 'PE oficializado');
-    if (s && esFecha(s[col(S.cobro)])) hito(k, 'cobranza', s[col(S.cobro)], 'seguimiento');
+    // Cobranza: "Fecha de Cobro" de COBRANZAS (col. S). Cuando el estado pasa a COBRADO la operación se cierra.
+    const fc = fechaCobro[k] || fechaCobro[k.slice(0, 6)];
+    if (fc) hito(k, 'cobranza', fc, 'cobranzas', 'Fecha de Cobro en COBRANZAS');
     const ant = anticipo[k] || anticipo[k.slice(0, 6)];
     if (ant) hito(k, 'anticipo', null, 'cobranzas', 'Anticipo en COBRANZAS: ' + ant.toLocaleString('en-US') + ' USD');
   });
