@@ -2,7 +2,7 @@
 -- Los "días desde que…" (llegó el draft del BL, se mandaron los drafts, se aprobaron,
 -- llegó el fito, se firmó el contrato) se cuentan sin sábados ni domingos, y los plazos
 -- (rojo a los 2 días, etc.) también. Los plazos contra el ETA o la carga siguen en corridos.
--- No descuenta feriados.
+-- No descuenta feriados. Los textos dicen "días" (sin "hábiles").
 
 create or replace function public.op_habiles(p_desde date, p_hasta date)
 returns int
@@ -117,7 +117,7 @@ as $$
     union all
     -- Anticipo: recordatorio cada 3 días desde la firma
     select o.*, 'anticipo', 'vencida',
-      'Consultar anticipo: ' || (op_habiles(o.f_firma, o.hoy)) || ' días hábiles desde la firma del contrato',
+      'Consultar anticipo: ' || (op_habiles(o.f_firma, o.hoy)) || ' días desde la firma del contrato',
       op_mas_habiles(o.f_firma, 3), ((op_habiles(o.f_firma, o.hoy)) % 3 = 0), o.url_cv
     from o where not o.anticipo and o.f_firma is not null
       -- Lleva anticipo: marcado a mano, o según las condiciones de pago (estas dejan de alertar si ya cargó)
@@ -128,7 +128,7 @@ as $$
     -- IP: 7 días desde la firma (solo destinos que lo piden)
     select o.*, 'ip',
       case when op_habiles(o.f_firma, o.hoy) > 7 then 'vencida' else 'proxima' end,
-      'IP sin emitir: ' || (op_habiles(o.f_firma, o.hoy)) || ' días hábiles desde la firma del contrato',
+      'IP sin emitir: ' || (op_habiles(o.f_firma, o.hoy)) || ' días desde la firma del contrato',
       op_mas_habiles(o.f_firma, 7), true, o.url_cv
     from o where not o.ip and o.f_firma is not null
       -- Lleva IP: marcado a mano, o según el destino (este deja de alertar si ya cargó)
@@ -169,7 +169,7 @@ as $$
     -- Mandar drafts: 2 días después de que el forwarder manda el draft de BL
     select o.*, 'draft_enviado',
       case when op_habiles(o.f_draft_bl, o.hoy) >= 2 then 'vencida' else 'proxima' end,
-      'Mandar drafts al cliente: el draft de BL llegó hace ' || (op_habiles(o.f_draft_bl, o.hoy)) || ' días hábiles',
+      'Mandar drafts al cliente: el draft de BL llegó hace ' || (op_habiles(o.f_draft_bl, o.hoy)) || ' días',
       op_mas_habiles(o.f_draft_bl, 2), true, o.url_cv
     from o where not o.terrestre and not o.draft_env and not o.draft_ok and not o.originales and o.f_draft_bl is not null
       and op_habiles(o.f_draft_bl, o.hoy) >= 1
@@ -204,7 +204,7 @@ as $$
       and not (o.dr_peso and o.dr_fumigacion) and not o.draft_env and not o.draft_ok and not o.originales
     union all
     select o.*, 'draft_aprobado', 'vencida',
-      'Consultar aprobación de drafts: enviados hace ' || (op_habiles(o.f_draft_env, o.hoy)) || ' días hábiles',
+      'Consultar aprobación de drafts: enviados hace ' || (op_habiles(o.f_draft_env, o.hoy)) || ' días',
       op_mas_habiles(o.f_draft_env, 1), true, case when o.url_cv like '%#search/subject%' then coalesce(o.url_draft_env, o.url_cv) else o.url_cv end
     from o where not o.terrestre and o.draft_env and not o.draft_ok and not o.originales and o.f_draft_env is not null
       and op_habiles(o.f_draft_env, o.hoy) >= 1
@@ -212,7 +212,7 @@ as $$
     -- Originales: a las 48 hs de la aprobación de drafts
     select o.*, 'originales',
       case when op_habiles(o.f_draft_ok, o.hoy) >= 2 then 'vencida' else 'proxima' end,
-      'Faltan originales: ' || (op_habiles(o.f_draft_ok, o.hoy)) || ' días hábiles desde la aprobación de drafts',
+      'Faltan originales: ' || (op_habiles(o.f_draft_ok, o.hoy)) || ' días desde la aprobación de drafts',
       op_mas_habiles(o.f_draft_ok, 2), true, o.url_ag
     from o where o.draft_ok and not o.originales and o.f_draft_ok is not null
       and op_habiles(o.f_draft_ok, o.hoy) >= 1
@@ -220,7 +220,7 @@ as $$
     -- GMO: a los 2 días de que llega el fito original, si la operación lo pide
     select o.*, 'gmo',
       case when op_habiles(o.f_fito, o.hoy) >= 2 then 'vencida' else 'proxima' end,
-      'Falta el GMO original: ' || (op_habiles(o.f_fito, o.hoy)) || ' días hábiles desde que llegó el fito original',
+      'Falta el GMO original: ' || (op_habiles(o.f_fito, o.hoy)) || ' días desde que llegó el fito original',
       op_mas_habiles(o.f_fito, 2), true, o.url_ag
     from o where o.pide_gmo and not o.gmo and o.f_fito is not null
       and op_habiles(o.f_fito, o.hoy) >= 1
