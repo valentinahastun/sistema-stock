@@ -27,7 +27,7 @@ export default async function StockPage({
           "lote_id, planta_id, producto_id, productor, numero_cp, estado, fecha_ingreso, caida_pct_estimada, stock_actual_tn"
         )
         .order("fecha_ingreso", { ascending: false }),
-      supabase.from("movimientos_stock").select("lote_id, cantidad").eq("tipo", "descarte"),
+      supabase.from("movimientos_stock").select("lote_id, cantidad, tipo").in("tipo", ["descarte", "cubierto"]),
       supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags, tipo_descarte, proceso_id, procesos!lotes_proceso_id_fkey(numero)"),
       supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv, bolsas_25, bolsas_50, big_bags, productores(nombre)").eq("tipo", "egreso").is("lote_id", null),
       // Lo que entró de cada lote a un proceso
@@ -60,7 +60,8 @@ export default async function StockPage({
 
   // Descarte real ya cargado en cada lote (para los lotes procesados)
   const descartePorLote = new Map<string, number>();
-  (descartes ?? []).forEach((d: any) => {
+  const cubiertos = new Set<string>((descartes ?? []).filter((d: any) => d.tipo === "cubierto").map((d: any) => d.lote_id));
+  (descartes ?? []).filter((d: any) => d.tipo === "descarte").forEach((d: any) => {
     descartePorLote.set(d.lote_id, (descartePorLote.get(d.lote_id) ?? 0) + Number(d.cantidad));
   });
 
@@ -68,8 +69,9 @@ export default async function StockPage({
   (lotes ?? []).forEach((l: any) => {
     const clave = `${l.planta_id}-${l.producto_id}`;
     const aProc = aProcesoPorLote.get(l.lote_id);
-    // Un lote que entró entero a un proceso ya no se muestra (está en el proceso)
-    if (aProc && Number(l.stock_actual_tn) <= 0.0005) return;
+    // Un lote que entró entero a un proceso ya no se muestra (está en el proceso),
+    // ni una compra que ya entró entera con su CP (el stock está en el lote de la CP)
+    if ((aProc || cubiertos.has(l.lote_id)) && Number(l.stock_actual_tn) <= 0.0005) return;
     const extra = bolsasPorLote.get(l.lote_id);
     const lista = lotesPorClave.get(clave) ?? [];
     lista.push({
@@ -160,6 +162,14 @@ export default async function StockPage({
       libreTn: stockDisponibleTn - comprometidoTn,
     };
   });
+
+  // Plantas/productos que quedaron en cero solo por compras ya cubiertas por su CP
+  filas = filas.filter(
+    (f) =>
+      Math.abs(f.stockDisponibleTn) > 0.0005 ||
+      f.comprometidoTn > 0.0005 ||
+      (lotesPorClave.get(`${f.planta_id}-${f.producto_id}`) ?? []).length > 0
+  );
 
   if (searchParams.planta_id) {
     filas = filas.filter((f) => f.planta_id === searchParams.planta_id);

@@ -20,22 +20,33 @@ export default async function IngresosPage({
   const perfil = await getPerfilActual();
   const esAdmin = perfil?.rol === "admin";
 
-  const [{ data: plantas }, { data: productos }, { data: movimientos }] = await Promise.all([
+  const [{ data: plantas }, { data: productos }, { data: movimientos }, { data: cubiertos }] = await Promise.all([
     supabase.from("plantas").select("id, nombre").order("nombre"),
     supabase.from("productos").select("id, nombre").order("nombre"),
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, observaciones, controlo_carga, lotes!lote_id(cv, numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
+        "id, cantidad, fecha, observaciones, controlo_carga, lote_id, lotes!lote_id(cv, numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
       .is("proceso_id", null)
       .order("fecha", { ascending: false })
       .limit(300),
+    // Compras que ya entraron con su CP (no suman stock dos veces)
+    supabase.from("movimientos_stock").select("lote_id, cantidad, observaciones").eq("tipo", "cubierto"),
   ]);
+  const cubiertoPorLote = new Map<string, { tn: number; cps: string[] }>();
+  (cubiertos ?? []).forEach((c: any) => {
+    const x = cubiertoPorLote.get(c.lote_id) ?? { tn: 0, cps: [] };
+    x.tn += Number(c.cantidad);
+    const cp = String(c.observaciones ?? "").match(/CP (\S+)/)?.[1];
+    if (cp && !x.cps.includes(cp)) x.cps.push(cp);
+    cubiertoPorLote.set(c.lote_id, x);
+  });
 
   type Fila = {
     id: string;
+    lote_id: string;
     cantidad: number;
     fecha: string;
     observaciones: string | null;
@@ -131,7 +142,15 @@ export default async function IngresosPage({
                 <td className="px-4 py-2 text-right font-medium">
                   {Number(f.cantidad).toFixed(2)}
                 </td>
-                <td className="px-4 py-2 text-gray-500">{f.observaciones ?? "—"}</td>
+                <td className="px-4 py-2 text-gray-500">
+                  {f.observaciones ?? "—"}
+                  {cubiertoPorLote.has(f.lote_id) && (
+                    <div className="text-xs text-sky-700">
+                      Ya entró con CP {cubiertoPorLote.get(f.lote_id)!.cps.join(", ")} (
+                      {cubiertoPorLote.get(f.lote_id)!.tn.toFixed(2)} tn): no suma stock de nuevo
+                    </div>
+                  )}
+                </td>
                 {esAdmin && (
                   <td className="px-4 py-2">
                     <BotonEliminarMovimiento movimientoId={f.id} />

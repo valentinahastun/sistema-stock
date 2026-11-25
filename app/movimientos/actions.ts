@@ -105,8 +105,14 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
       return { ok: false, error: errorMov.message };
     }
 
+    // Si esta CP es una compra de la solapa COMPRAS que ya estaba en stock,
+    // la compra queda cubierta y no se cuenta dos veces.
+    await supabase.rpc("conciliar_compras_cp", { p_productor: productor_id, p_producto: producto_id });
+
     revalidatePath("/");
     revalidatePath("/movimientos");
+    revalidatePath("/stock");
+    revalidatePath("/ingresos");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -312,7 +318,8 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
         .select("id, tipo")
         .eq("lote_id", movimiento.lote_id)
         .neq("id", movimiento.id);
-      if ((encima ?? []).length && (encima ?? []).every((m: { tipo: string }) => m.tipo === "descarte")) {
+      // (también lo que quedó cubierto por una CP, si es una compra)
+      if ((encima ?? []).length && (encima ?? []).every((m: { tipo: string }) => m.tipo === "descarte" || m.tipo === "cubierto")) {
         for (const m of encima ?? []) {
           const r = await eliminarMovimiento(m.id);
           if (!r.ok) return r;
