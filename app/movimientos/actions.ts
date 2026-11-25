@@ -59,9 +59,14 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
     const fecha_ingreso = formData.get("fecha") as string;
     const cantidad = Number(formData.get("cantidad"));
     const observaciones = (formData.get("observaciones") as string) || null;
+    const cvTexto = ((formData.get("cv") as string) || "").trim();
+    const cv = cvTexto ? normalizarCv(cvTexto) : null;
 
     if (!planta_id || !producto_id || !productor_id || !cantidad) {
       return { ok: false, error: "Faltan datos obligatorios." };
+    }
+    if (cvTexto && !cv) {
+      return { ok: false, error: `No entendí el CV "${cvTexto}". Escribilo como 26-124 o 26-115 A.` };
     }
 
     const { data: lote, error: errorLote } = await supabase
@@ -77,6 +82,7 @@ export async function crearIngreso(formData: FormData): Promise<Resultado> {
         patente,
         fecha_ingreso,
         cantidad_ingresada: cantidad,
+        cv,
         ...bolsasDe(formData),
       })
       .select("id")

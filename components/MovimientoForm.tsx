@@ -1048,6 +1048,10 @@ export default function MovimientoForm({
               <input name="controlo_carga" className="input" placeholder="Nombre de quien estuvo en la carga" />
             </Campo>
 
+            <Campo label="CV (opcional: si este lote ya es para una operación)">
+              <input name="cv" className="input" placeholder="Ej.: 26-124" />
+            </Campo>
+
             <Campo label="Cantidad (toneladas)">
               <input
                 name="cantidad"
