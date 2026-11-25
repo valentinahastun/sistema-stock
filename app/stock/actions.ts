@@ -65,9 +65,111 @@ export async function confirmarCaidaEstimada(
     if (!perfil || perfil.rol !== "admin") {
       return { ok: false, error: "Solo el usuario administrador puede confirmarlo." };
     }
+    const r = await aplicarCaida(createClient(), loteId, input);
+    if (r.ok) revalidarStock();
+    return r;
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
 
+function revalidarStock() {
+  revalidatePath("/stock");
+  revalidatePath("/movimientos");
+  revalidatePath("/ingresos");
+  revalidatePath("/egresos");
+  revalidatePath("/");
+}
+
+// Varias CP del mismo productor que forman un solo lote (entraron natural
+// en los mismos días): la caída se carga una vez para todas y se reparte
+// entre las CP en proporción a lo que tiene cada una. Cada CP queda con su
+// propio descarte (y su propio ingreso de descarte), así se puede deshacer
+// igual que siempre desde Movimientos.
+export async function confirmarCaidaGrupo(
+  loteIds: string[],
+  input: CaidaEstimadaInput
+): Promise<Resultado> {
+  try {
+    const perfil = await getPerfilActual();
+    if (!perfil || perfil.rol !== "admin") {
+      return { ok: false, error: "Solo el usuario administrador puede confirmarlo." };
+    }
+    if (!loteIds.length) return { ok: false, error: "No hay CP para cargar." };
     const supabase = createClient();
 
+    const [{ data: lotes }, { data: stocks }] = await Promise.all([
+      supabase.from("lotes").select("id, estado, planta_id, producto_id, productor_id").in("id", loteIds),
+      supabase.from("stock_lotes").select("lote_id, stock_actual_tn").in("lote_id", loteIds),
+    ]);
+    if (!lotes || lotes.length !== loteIds.length) return { ok: false, error: "No se encontraron todas las CP." };
+    if (lotes.some((l) => l.estado !== "natural")) {
+      return { ok: false, error: "Alguna de las CP ya está procesada. Recargá la página." };
+    }
+    const mismo = (k: "planta_id" | "producto_id" | "productor_id") => new Set(lotes.map((l) => l[k])).size === 1;
+    if (!mismo("planta_id") || !mismo("producto_id") || !mismo("productor_id")) {
+      return { ok: false, error: "Las CP no son de la misma planta, producto y productor." };
+    }
+
+    const stockDe = new Map((stocks ?? []).map((s) => [s.lote_id as string, Number(s.stock_actual_tn)]));
+    const conStock = loteIds.filter((id) => (stockDe.get(id) ?? 0) > 0.0005);
+    const total = conStock.reduce((acc, id) => acc + (stockDe.get(id) ?? 0), 0);
+    if (total <= 0) return { ok: false, error: "Estas CP no tienen stock." };
+
+    // Cuánto descarte va a cada CP
+    const partes: { id: string; input: CaidaEstimadaInput }[] = [];
+    if (input.modo === "pct") {
+      const pct = Number(input.valor);
+      if (input.valor === "" || Number.isNaN(pct) || pct <= 0 || pct > 100) {
+        return { ok: false, error: "Tiene que ser un número mayor a 0 y hasta 100." };
+      }
+      conStock.forEach((id) => partes.push({ id, input }));
+    } else {
+      const tn = Math.round(Number(input.valor) * 1000) / 1000;
+      if (input.valor === "" || Number.isNaN(tn) || tn <= 0) {
+        return { ok: false, error: "Tiene que ser un número mayor a 0." };
+      }
+      if (tn > total + 0.0005) {
+        return { ok: false, error: `No puede superar el stock de las CP (${total.toFixed(2)} tn).` };
+      }
+      let resto = tn;
+      conStock.forEach((id, i) => {
+        const stock = stockDe.get(id) ?? 0;
+        const parte =
+          i === conStock.length - 1 ? Math.min(Math.round(resto * 1000) / 1000, stock) : Math.round(((tn * stock) / total) * 1000) / 1000;
+        resto -= parte;
+        if (parte > 0) partes.push({ id, input: { modo: "tn", valor: String(parte) } });
+      });
+    }
+
+    let hechas = 0;
+    for (const p of partes) {
+      const r = await aplicarCaida(supabase, p.id, p.input);
+      if (!r.ok) {
+        if (hechas) revalidarStock();
+        return {
+          ok: false,
+          error: hechas
+            ? `Se cargó en ${hechas} de ${partes.length} CP y falló en la siguiente: ${r.error}`
+            : r.error,
+        };
+      }
+      hechas++;
+    }
+    revalidarStock();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Carga la caída de un lote (sin chequear permisos ni revalidar pantallas)
+async function aplicarCaida(
+  supabase: ReturnType<typeof createClient>,
+  loteId: string,
+  input: CaidaEstimadaInput
+): Promise<Resultado> {
+  {
     const { data: lote, error: errorLote } = await supabase
       .from("lotes")
       .select(
@@ -190,14 +292,7 @@ export async function confirmarCaidaEstimada(
     // se cargó en tn) a modo de registro en el lote original.
     await supabase.from("lotes").update({ caida_pct_estimada: pctParaGuardar }).eq("id", loteId);
 
-    revalidatePath("/stock");
-    revalidatePath("/movimientos");
-    revalidatePath("/ingresos");
-    revalidatePath("/egresos");
-    revalidatePath("/");
     return { ok: true };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
   }
 }
 

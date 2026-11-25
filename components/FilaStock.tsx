@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { confirmarCaidaEstimada, guardarBolsas } from "@/app/stock/actions";
+import { confirmarCaidaEstimada, confirmarCaidaGrupo, guardarBolsas } from "@/app/stock/actions";
 import { NOMBRE_TIPO_DESCARTE } from "@/lib/procesos";
 
 export type LoteDetalle = {
@@ -264,11 +264,86 @@ function DetalleLotes({
         </tr>
       </thead>
       <tbody>
-        {lotes.map((l) => (
-          <FilaLote key={l.lote_id} lote={l} puedeEditar={puedeEditar} esDescarte={esDescarte} />
-        ))}
+        {agruparLotes(lotes).map((g) =>
+          g.length === 1 ? (
+            <FilaLote key={g[0].lote_id} lote={g[0]} puedeEditar={puedeEditar} esDescarte={esDescarte} />
+          ) : (
+            <GrupoLotes key={g[0].lote_id} lotes={g} puedeEditar={puedeEditar} esDescarte={esDescarte} />
+          )
+        )}
       </tbody>
     </table>
+  );
+}
+
+// Varias CP en natural del mismo productor (y mismo CV) son un mismo lote:
+// van juntas en una fila, para cargar la caída una sola vez. Lo demás
+// (procesados, descartes de proceso) sigue fila por fila.
+function agruparLotes(lotes: LoteDetalle[]): LoteDetalle[][] {
+  const grupos: LoteDetalle[][] = [];
+  const porClave = new Map<string, LoteDetalle[]>();
+  lotes.forEach((l) => {
+    const juntable = l.estado === "natural" && !l.tipo_descarte && !l.de_proceso;
+    if (!juntable) return grupos.push([l]);
+    const clave = `${l.productor ?? ""}|${l.cv ?? ""}`;
+    const g = porClave.get(clave);
+    if (g) g.push(l);
+    else {
+      const nuevo = [l];
+      porClave.set(clave, nuevo);
+      grupos.push(nuevo);
+    }
+  });
+  return grupos;
+}
+
+const fechaCorta = (f: string) => f.split("-").reverse().slice(0, 2).join("/");
+
+function GrupoLotes({
+  lotes,
+  puedeEditar,
+  esDescarte,
+}: {
+  lotes: LoteDetalle[];
+  puedeEditar: boolean;
+  esDescarte: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const fechas = lotes.map((l) => l.fecha_ingreso).sort();
+  const vistas = new Set<string>();
+  const calidades = lotes
+    .flatMap((l) => l.calidades ?? [])
+    .filter((c) => (vistas.has(c.id) ? false : (vistas.add(c.id), true)))
+    .slice(0, 3);
+  const pcts = Array.from(new Set(lotes.map((l) => l.caida_pct_estimada)));
+  const junto: LoteDetalle = {
+    ...lotes[0],
+    numero_cp: null,
+    fecha_ingreso: fechas[fechas.length - 1],
+    stock_actual_tn: lotes.reduce((acc, l) => acc + l.stock_actual_tn, 0),
+    caida_pct_estimada: pcts.length === 1 ? pcts[0] : null,
+    salidas: lotes.flatMap((l) => l.salidas ?? []),
+    a_proceso: lotes.flatMap((l) => l.a_proceso ?? []),
+    calidades,
+  };
+  return (
+    <>
+      <FilaLote
+        lote={junto}
+        puedeEditar={puedeEditar}
+        esDescarte={esDescarte}
+        grupo={{
+          ids: lotes.map((l) => l.lote_id),
+          desde: fechas[0],
+          abierto,
+          alternar: () => setAbierto((v) => !v),
+        }}
+      />
+      {abierto &&
+        lotes.map((l) => (
+          <FilaLote key={l.lote_id} lote={l} puedeEditar={puedeEditar} esDescarte={esDescarte} dentroDeGrupo />
+        ))}
+    </>
   );
 }
 
@@ -282,10 +357,15 @@ function FilaLote({
   lote,
   puedeEditar,
   esDescarte,
+  grupo,
+  dentroDeGrupo,
 }: {
   lote: LoteDetalle;
   puedeEditar: boolean;
   esDescarte: boolean;
+  // Fila que junta varias CP del mismo productor (ver GrupoLotes)
+  grupo?: { ids: string[]; desde: string; abierto: boolean; alternar: () => void };
+  dentroDeGrupo?: boolean; // CP suelta mostrada al abrir un grupo
 }) {
   const router = useRouter();
   const [modo, setModo] = useState<"pct" | "tn" | null>(
@@ -358,21 +438,22 @@ function FilaLote({
       setError("Ingresá un % (0 a 100) o las toneladas de descarte.");
       return;
     }
+    const enCp = grupo ? ` entre las ${grupo.ids.length} CP (repartido según lo que tiene cada una)` : " en este lote";
     const mensaje =
       modo === "pct"
         ? `Se va a cargar un descarte real de ${descarteEstimado?.toFixed(
             2
-          )} tn (${pctRaw}%) en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`
-        : `Se va a cargar un descarte real de ${tnRaw} tn en este lote (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`;
+          )} tn (${pctRaw}%)${enCp} (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`
+        : `Se va a cargar un descarte real de ${tnRaw} tn${enCp} (queda "procesado") y un ingreso nuevo por la misma cantidad como descarte. ¿Confirmás?`;
     const confirmado = window.confirm(mensaje);
     if (!confirmado) return;
 
     setConfirmando(true);
     setError(null);
-    const resultado = await confirmarCaidaEstimada(
-      lote.lote_id,
-      modo === "pct" ? { modo: "pct", valor: pctRaw } : { modo: "tn", valor: tnRaw }
-    );
+    const input = modo === "pct" ? { modo: "pct" as const, valor: pctRaw } : { modo: "tn" as const, valor: tnRaw };
+    const resultado = grupo
+      ? await confirmarCaidaGrupo(grupo.ids, input)
+      : await confirmarCaidaEstimada(lote.lote_id, input);
     setConfirmando(false);
     if (resultado.ok) {
       router.refresh();
@@ -385,11 +466,30 @@ function FilaLote({
   const puedeCargar = esNatural && puedeEditar;
 
   return (
-    <tr className="border-t border-gray-200 align-top">
-      <td className="px-2 py-1.5 whitespace-nowrap">{lote.fecha_ingreso}</td>
+    <tr
+      className={`align-top ${
+        dentroDeGrupo ? "border-t border-gray-100 bg-white text-gray-500" : "border-t border-gray-200"
+      } ${grupo ? "font-medium" : ""}`}
+    >
+      <td className={`px-2 py-1.5 whitespace-nowrap ${dentroDeGrupo ? "pl-6" : ""}`}>
+        {grupo && grupo.desde !== lote.fecha_ingreso
+          ? `${fechaCorta(grupo.desde)} al ${fechaCorta(lote.fecha_ingreso)}`
+          : lote.fecha_ingreso}
+      </td>
       <td className="px-2 py-1.5">{lote.productor}</td>
       <td className="px-2 py-1.5">
-        {lote.numero_cp ?? "—"}
+        {grupo ? (
+          <button
+            type="button"
+            onClick={grupo.alternar}
+            className="text-brand-navy hover:underline whitespace-nowrap"
+            title="Ver cada CP"
+          >
+            {grupo.abierto ? "▾" : "▸"} {grupo.ids.length} CP
+          </button>
+        ) : (
+          lote.numero_cp ?? "—"
+        )}
         {lote.calidades?.map((c) => (
           <a
             key={c.id}
