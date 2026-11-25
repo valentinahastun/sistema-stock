@@ -572,6 +572,32 @@ export async function cambiarCvEgreso(movimientoId: string, cvTexto: string): Pr
   }
 }
 
+// CV de un ingreso: se guarda en el lote (queda comprometido a ese CV en Stock).
+export async function cambiarCvIngreso(movimientoId: string, cvTexto: string): Promise<Resultado> {
+  try {
+    await verificarAdmin();
+    const texto = cvTexto.trim();
+    const cv = texto ? normalizarCv(texto) : null;
+    if (texto && !cv) return { ok: false, error: `No entendí el CV "${texto}". Escribilo como 26-124 o 26-115 A.` };
+    const supabase = createClient();
+    const { data: mov, error: e1 } = await supabase
+      .from("movimientos_stock")
+      .select("lote_id")
+      .eq("id", movimientoId)
+      .eq("tipo", "ingreso")
+      .single();
+    if (e1 || !mov?.lote_id) return { ok: false, error: "No se encontró el ingreso." };
+    const { error } = await supabase.from("lotes").update({ cv }).eq("id", mov.lote_id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/ingresos");
+    revalidatePath("/stock");
+    revalidatePath("/");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 // ¿Esta CP ya está cargada? Se compara solo con movimientos del mismo tipo:
 // la misma CP puede ser el egreso de una planta y el ingreso en otra.
 export type CpCargada = { fecha: string | null; planta_id: string | null; producto_id: string | null; tn: number | null };

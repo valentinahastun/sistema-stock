@@ -277,8 +277,10 @@ function DetalleLotes({
 }
 
 // Varias CP en natural del mismo productor (y mismo CV) son un mismo lote:
-// van juntas en una fila, para cargar la caída una sola vez. Lo demás
-// (procesados, descartes de proceso) sigue fila por fila.
+// van juntas en una fila, para cargar la caída una sola vez. Si entre una CP
+// y la siguiente pasan 15 días o más, es otro lote. Lo demás (procesados,
+// descartes de proceso) sigue fila por fila.
+const DIAS_CORTE_LOTE = 15;
 function agruparLotes(lotes: LoteDetalle[]): LoteDetalle[][] {
   const grupos: LoteDetalle[][] = [];
   const porClave = new Map<string, LoteDetalle[]>();
@@ -286,15 +288,26 @@ function agruparLotes(lotes: LoteDetalle[]): LoteDetalle[][] {
     const juntable = l.estado === "natural" && !l.tipo_descarte && !l.de_proceso;
     if (!juntable) return grupos.push([l]);
     const clave = `${l.productor ?? ""}|${l.cv ?? ""}`;
-    const g = porClave.get(clave);
-    if (g) g.push(l);
-    else {
-      const nuevo = [l];
-      porClave.set(clave, nuevo);
-      grupos.push(nuevo);
-    }
+    porClave.set(clave, [...(porClave.get(clave) ?? []), l]);
   });
-  return grupos;
+  const dia = (f: string) => Date.parse(f + "T00:00:00Z") / 86400000;
+  porClave.forEach((ls) => {
+    const orden = [...ls].sort((x, y) => (x.fecha_ingreso < y.fecha_ingreso ? -1 : x.fecha_ingreso > y.fecha_ingreso ? 1 : 0));
+    let actual: LoteDetalle[] = [];
+    orden.forEach((l, i) => {
+      if (i > 0 && dia(l.fecha_ingreso) - dia(orden[i - 1].fecha_ingreso) >= DIAS_CORTE_LOTE) {
+        grupos.push(actual);
+        actual = [];
+      }
+      actual.push(l);
+    });
+    if (actual.length) grupos.push(actual);
+  });
+  // Del más nuevo al más viejo, como venía la lista; dentro del grupo, también
+  const ultima = (g: LoteDetalle[]) => g.reduce((m, l) => (l.fecha_ingreso > m ? l.fecha_ingreso : m), "");
+  return grupos
+    .map((g) => [...g].sort((x, y) => (x.fecha_ingreso < y.fecha_ingreso ? 1 : x.fecha_ingreso > y.fecha_ingreso ? -1 : 0)))
+    .sort((x, y) => (ultima(x) < ultima(y) ? 1 : ultima(x) > ultima(y) ? -1 : 0));
 }
 
 const fechaCorta = (f: string) => f.split("-").reverse().slice(0, 2).join("/");

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import FiltroStock from "@/components/FiltroStock";
 import BotonEliminarMovimiento from "@/components/BotonEliminarMovimiento";
+import CeldaCvEgreso from "@/components/CeldaCvEgreso";
 
 type Rel = { nombre: string }[] | { nombre: string } | null;
 function nombreDe(rel: Rel): string {
@@ -25,7 +26,7 @@ export default async function IngresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, observaciones, controlo_carga, lotes!lote_id(numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
+        "id, cantidad, fecha, observaciones, controlo_carga, lotes!lote_id(cv, numero_cp, transportista, chofer, patente, estado, planta_id, producto_id, plantas(nombre), productos(nombre), productores(nombre))"
       )
       .eq("tipo", "ingreso")
       .is("proceso_id", null)
@@ -40,6 +41,7 @@ export default async function IngresosPage({
     observaciones: string | null;
     controlo_carga: string | null;
     lotes: {
+      cv: string | null;
       numero_cp: string | null;
       transportista: string | null;
       chofer: string | null;
@@ -91,6 +93,7 @@ export default async function IngresosPage({
               <th className="px-4 py-2">Producto</th>
               <th className="px-4 py-2">Productor</th>
               <th className="px-4 py-2">Estado</th>
+              <th className="px-4 py-2">CV</th>
               <th className="px-4 py-2">CP / Transporte</th>
               <th className="px-4 py-2 text-right">Cantidad (tn)</th>
               <th className="px-4 py-2">Observaciones</th>
@@ -105,6 +108,9 @@ export default async function IngresosPage({
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productos ?? null)}</td>
                 <td className="px-4 py-2">{nombreDe(f.lotes?.productores ?? null)}</td>
                 <td className="px-4 py-2 capitalize">{f.lotes?.estado}</td>
+                <td className="px-4 py-2">
+                  <CeldaCvEgreso movimientoId={f.id} cv={f.lotes?.cv ?? null} puedeEditar={esAdmin} tipo="ingreso" />
+                </td>
                 <td className="px-4 py-2 text-xs text-gray-600">
                   {f.lotes?.numero_cp && <div>CP {f.lotes.numero_cp}</div>}
                   {(f.lotes?.transportista || f.lotes?.chofer || f.lotes?.patente) && (
@@ -135,7 +141,7 @@ export default async function IngresosPage({
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={esAdmin ? 9 : 8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={esAdmin ? 10 : 9} className="px-4 py-6 text-center text-gray-400">
                   No hay ingresos cargados todavía para este filtro.
                 </td>
               </tr>

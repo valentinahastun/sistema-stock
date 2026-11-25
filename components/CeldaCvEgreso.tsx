@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { cambiarCvEgreso } from "@/app/movimientos/actions";
+import { cambiarCvEgreso, cambiarCvIngreso } from "@/app/movimientos/actions";
 
 // CV de una salida: a qué operación fue (baja lo comprometido de ese CV).
+// Con tipo "ingreso": CV al que queda comprometido el lote que entró.
 export default function CeldaCvEgreso({
   movimientoId,
   cv,
   puedeEditar,
+  tipo = "egreso",
 }: {
   movimientoId: string;
   cv: string | null;
   puedeEditar: boolean;
+  tipo?: "egreso" | "ingreso";
 }) {
   const router = useRouter();
   const [editando, setEditando] = useState(false);
@@ -23,7 +26,7 @@ export default function CeldaCvEgreso({
   async function guardar() {
     setGuardando(true);
     setError(null);
-    const r = await cambiarCvEgreso(movimientoId, valor);
+    const r = await (tipo === "ingreso" ? cambiarCvIngreso : cambiarCvEgreso)(movimientoId, valor);
     setGuardando(false);
     if (r.ok) {
       setEditando(false);
