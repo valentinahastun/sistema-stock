@@ -366,6 +366,7 @@ const TAREAS = [
   { paso: 'draft_isb', titulo: 'Drafts de ISB', icono: '🧾' },
   { paso: 'analisis_modif', titulo: 'Modificaciones del análisis', icono: '🔬' },
   { paso: 'draft_enviado', titulo: 'Mandar drafts al cliente', icono: '📤' },
+  { paso: 'draft_modif', titulo: 'Reenviar drafts con los cambios', icono: '✏️' },
   { paso: 'draft_aprobado', titulo: 'Consultar aprobación de drafts', icono: '📄' },
   { paso: 'originales', titulo: 'Reclamar originales', icono: '📦' },
   { paso: 'gmo', titulo: 'Reclamar GMO original', icono: '🧬' },
@@ -576,7 +577,24 @@ function leerMails() {
     const todos = h.getMessages();
     // ¿Reymar mandó una DDEE en este hilo? (aunque sea antes de la última lectura)
     const ddeeHilo = todos.some(m => /reymar/i.test(m.getFrom()) && /\bddee\b/i.test(m.getPlainBody() || ''));
-    todos.forEach(m => {
+    // Vueltas de drafts en el hilo: qué mensajes del equipo son un juego de drafts
+    // (se calcula solo si hace falta, porque leer adjuntos tarda) y cuáles del
+    // cliente piden cambios.
+    const info = todos.map(x => ({ x, eq: MAIL.EQUIPO.indexOf(direcciones(x.getFrom())[0] || '') >= 0 }));
+    const esJuego = i => {
+      if (!info[i].eq) return false;
+      if (info[i].juego === undefined) {
+        info[i].juego = esJuegoDrafts(info[i].x.getAttachments({ includeInlineImages: false }).map(a => a.getName()),
+          textoPropio(info[i].x.getPlainBody() || ''));
+      }
+      return info[i].juego;
+    };
+    const pideCambios = i => {
+      if (info[i].eq) return false;
+      if (info[i].cambios === undefined) info[i].cambios = CAMBIOS_DRAFTS.test(sinAcentos(textoPropio(info[i].x.getPlainBody() || '')));
+      return info[i].cambios;
+    };
+    todos.forEach((m, j) => {
     if (m.getDate() < desde) return;
     const de = direcciones(m.getFrom())[0] || '';
     const texto = textoPropio(m.getPlainBody() || '');
@@ -595,6 +613,16 @@ function leerMails() {
       adjuntos: verAdjuntos ? m.getAttachments({ includeInlineImages: false }).map(a => a.getName()) : [],
       url: 'https://mail.google.com/mail/#all/' + m.getId(),
       ddeeHilo,
+      // Cliente que pide cambios después de que le mandamos drafts en este hilo
+      trasDrafts: !info[j].eq && pideCambios(j) && info.some((_, i) => i < j && esJuego(i)),
+      // Juego de drafts del equipo que sale después de que el cliente pidió cambios
+      reenvio: info[j].eq && (() => {
+        let previo = -1;
+        for (let i = j - 1; i >= 0; i--) if (esJuego(i)) { previo = i; break; }
+        if (previo < 0) return false;
+        for (let k = previo + 1; k < j; k++) if (pideCambios(k)) return true;
+        return false;
+      })(),
       draftsPrevios: MAIL.EQUIPO.indexOf(de) < 0 && APROBACION_CORTA.test((texto.split('\n').find(l => l.trim()) || '').trim())
         ? todos.some(x => x.getDate() < m.getDate() && MAIL.EQUIPO.indexOf(direcciones(x.getFrom())[0] || '') >= 0 &&
             esJuegoDrafts(x.getAttachments({ includeInlineImages: false }).map(a => a.getName()), textoPropio(x.getPlainBody() || '')))
@@ -825,6 +853,13 @@ function analizarMensajes(msgs, terrestres) {
       return;
     }
 
+    // 7b: el cliente (o el broker) pide cambios en los drafts que le mandamos
+    if (esCliente(m.de) && m.trasDrafts) {
+      const cv = cvDeAsunto(asunto) || cvDeAsunto(m.asunto);
+      add(m, 'draft_modif', cv, !!cv, cv ? 'El cliente pidió cambios en los drafts (' + m.de + ')' : 'Cambios en drafts sin CV en el asunto');
+      return;
+    }
+
     // 4: BL final fechado
     if (/BL\s+FINAL\s+FECHADO/i.test(m.asunto) && !/^\s*(re|rv|fw|fwd)\s*:/i.test(m.asunto)) {
       const cv = cvDeAsunto(m.asunto);
@@ -848,6 +883,11 @@ function analizarMensajes(msgs, terrestres) {
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0] || docs[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
         : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
+      // Si antes el cliente había pedido cambios, es el reenvío con las correcciones
+      if (m.reenvio) {
+        add(Object.assign({}, m, { id: m.id + '-reenvio' }), 'draft_reenviado', cv, !!cv,
+          cv ? 'Drafts corregidos reenviados a ' + m.para.filter(esCliente)[0] : 'Drafts reenviados sin CV en el asunto');
+      }
     }
   });
 
@@ -861,6 +901,10 @@ function analizarMensajes(msgs, terrestres) {
 const IP_ADJUNTO = /\b(adjunto|adjunta|adjuntamos|envio|enviamos|attached|attaching|attach|find)\b[^.\n]{0,25}\b(el\s+|la\s+|the\s+)?(ip|import\s+permit|import\s+clearance|sps[\s-]*ic)\b|\b(ip|import\s+permit)\s+(adjunto|attached)\b/i;
 
 // Drafts de documentos: draft BL, PREFITO, ORIGEN - AG nnn (borrador del CO), "borrador"
+// El cliente pide cambios en los drafts: "debe decir", "en lugar de", "no puede figurar",
+// "sacar el aprox", "should read", "instead of", "please amend"...
+const CAMBIOS_DRAFTS = /\b(debe(n|ria|rian)?\s+(decir|ser|figurar|estar)|en\s+(lugar|vez)\s+de|no\s+(puede|debe)\s+figurar|sacar|quitar|agregar|corregir|correcci|modificar|modificaci|cambiar|cambio|alinear|errores|error|comentarios|should\s+(read|be|say|state|show)|instead\s+of|please\s+(change|correct|amend|modify|revise|add|remove|delete)|amend|correction|mistake|typo|wrong)/i;
+
 const APRUEBA_DRAFTS = /(acepta[nr]?|aceptamos)\s+(proceder|avanzar)|(quedo\s+atent[ao]|aguardo|espero)\s+(al|el|a\s+los|los)\s+(scan\s+de\s+(los\s+)?)?originales|(drafts?|documents?|documento?s|borradores|docs)\b[^.\n]{0,40}\b(approved|aprobad[oa]s?|ok\b|confirmad[oa]s?)|proceder\s+con\s+(los\s+)?originales|proceed\s+(to|with)\s+(the\s+)?originals?|(approve|aprobamos|confirmamos)\s+(the\s+|los\s+)?(drafts?|documents|documentos|borradores)/i;
 
 // "Proceder con originales" es aprobación aunque pida algún retoque en el mismo mail
@@ -1263,4 +1307,4 @@ function sinAcentos(s) { return String(s).normalize('NFD').replace(/[\u0300-\u03
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // Para pruebas locales con Node
-if (typeof module !== 'undefined') module.exports = { esJuegoDrafts, APROBACION_CORTA, armarCompras, columnasCompras, soloDraftBl, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };
+if (typeof module !== 'undefined') module.exports = { esJuegoDrafts, APROBACION_CORTA, CAMBIOS_DRAFTS, armarCompras, columnasCompras, soloDraftBl, DDEE_OK, PROCEDER_ORIGINALES, NO_APRUEBA, armarMailDiario, armarDatos, norm, CONFIG, analizarMensajes, textoPropio, cvDeAsunto, cvDeAg, esAdjuntoDraftBl, esAdjuntoDraft, direcciones, cvsDeEnvio, APRUEBA_DRAFTS, DOCS_DRIVE, DRAFTS_DRIVE, RAIZ_DRIVE };

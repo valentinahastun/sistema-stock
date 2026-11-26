@@ -308,6 +308,8 @@ export const PASOS_MARCABLES: Paso[] = [
   { codigo: "doc_crt", nombre: "MIC/DTA y CRT (terrestre)" },
   { codigo: "bl_a_isb", nombre: "Draft del BL enviado a ISB" },
   { codigo: "analisis_modif", nombre: "Modificaciones del análisis de ISB" },
+  { codigo: "draft_modif", nombre: "Cambios pedidos por el cliente en los drafts" },
+  { codigo: "draft_reenviado", nombre: "Drafts reenviados con los cambios" },
   { codigo: "cruce", nombre: "Cruce OK (terrestre)" },
   { codigo: "descarga", nombre: "Descarga en destino (terrestre)" },
   { codigo: "envio_docs", nombre: "Envío de documentos" },

@@ -14,6 +14,7 @@ const GRUPOS: { paso: string; titulo: string; icono: string }[] = [
   { paso: "draft_isb", titulo: "Drafts de ISB", icono: "🧾" },
   { paso: "analisis_modif", titulo: "Modificaciones del análisis de ISB", icono: "🔬" },
   { paso: "draft_enviado", titulo: "Drafts para mandar al cliente", icono: "📤" },
+  { paso: "draft_modif", titulo: "Drafts para reenviar con cambios", icono: "✏️" },
   { paso: "draft_aprobado", titulo: "Consultar aprobación de drafts", icono: "📄" },
   { paso: "originales", titulo: "Originales pendientes", icono: "📦" },
   { paso: "gmo", titulo: "GMO pendiente", icono: "🧬" },

@@ -55,7 +55,7 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
   ((hitosData ?? []) as Hito[]).forEach((h) => hechos.set(h.paso, h));
   const alertas = ((alertasData ?? []) as Alerta[]).filter((a) => a.clave === clave);
   // La alerta de GMO se muestra en "Originales completos"
-  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso === "draft_isb" || a.paso === "analisis_modif" ? "drafts" : a.paso, a]));
+  const alertaDe = new Map(alertas.map((a) => [a.paso === "gmo" ? "originales" : a.paso === "draft_isb" || a.paso === "analisis_modif" ? "drafts" : a.paso === "draft_modif" ? "draft_aprobado" : a.paso, a]));
 
   const lista = pasos(o);
   const terrestre = esTerrestre(o);
@@ -252,6 +252,42 @@ export default async function DetalleOperacion({ params }: { params: { clave: st
                               {puedeEditar && (
                                 <PasoEditable clave={o.clave} paso="analisis_modif" hecho={!!hm} fechaActual={hm?.fecha ?? null} detalleActual={hm?.detalle ?? null} compacto />
                               )}
+                            </div>
+                          );
+                        })()}
+                        {p.codigo === "drafts" && (() => {
+                          // Vueltas de cambios: el cliente pide correcciones y se reenvían
+                          const hc = hechos.get("draft_modif");
+                          const hr = hechos.get("draft_reenviado");
+                          if (!hc && !hr) return null;
+                          const vuelta = (d?: string | null) => Number(/^Vuelta (\d+)/.exec(d ?? "")?.[1] ?? 1);
+                          const pendiente =
+                            !!hc &&
+                            (!hr || (hr.fecha ?? "") < (hc.fecha ?? "") || (hr.fecha === hc.fecha && vuelta(hc.detalle) > vuelta(hr.detalle)));
+                          const linea = (paso: "draft_modif" | "draft_reenviado", x: typeof hc, texto: string, ok: boolean, falta?: string) => (
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                              <span className={ok ? "text-emerald-600" : "text-slate-300"}>{ok ? "✓" : "○"}</span>
+                              {x?.mail_url ? (
+                                <a href={x.mail_url} target="_blank" rel="noreferrer" className="hover:underline" title={x.detalle ?? ""}>
+                                  {texto}
+                                </a>
+                              ) : (
+                                <span className={ok ? "text-slate-700" : "text-slate-400"}>{texto}</span>
+                              )}
+                              {x?.fecha && <span className="text-xs text-slate-400">{fecha(x.fecha)}</span>}
+                              {x?.detalle && /^Vuelta \d+/.test(x.detalle) && vuelta(x.detalle) > 1 && (
+                                <span className="text-xs text-slate-400">vuelta {vuelta(x.detalle)}</span>
+                              )}
+                              {falta && <span className="text-xs text-amber-700">{falta}</span>}
+                              {puedeEditar && (
+                                <PasoEditable clave={o.clave} paso={paso} hecho={!!x} fechaActual={x?.fecha ?? null} detalleActual={x?.detalle ?? null} compacto />
+                              )}
+                            </div>
+                          );
+                          return (
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-200 space-y-1">
+                              {linea("draft_modif", hc, "Cambios pedidos por el cliente", !!hc)}
+                              {linea("draft_reenviado", hr, "Drafts reenviados con los cambios", !!hr && !pendiente, pendiente ? "falta reenviar" : undefined)}
                             </div>
                           );
                         })()}
