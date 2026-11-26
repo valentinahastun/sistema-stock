@@ -138,9 +138,38 @@ export default async function StockPage({
     })
   );
 
-  // Salidas (egresos) repartidas entre los lotes: ver lib/repartoEgresos.ts
+  // Salidas (egresos) repartidas entre los lotes: ver lib/repartoEgresos.ts.
+  // Una CP comprometida a varios CV (por las compras que la cubren) se reparte
+  // por partes, una por CV, y después se vuelve a juntar.
+  type Parte = {
+    lote: LoteDetalle;
+    productor: string;
+    estado: string;
+    fecha_ingreso: string;
+    stock_actual_tn: number;
+    cv: string | null;
+    salidas_tn?: number;
+    salidas?: { cv: string | null; tn: number }[];
+    bolsas_salidas?: { b25: number; b50: number; bb: number };
+  };
+  const partesPorClave = new Map<string, Parte[]>();
+  lotesPorClave.forEach((lista, clave) =>
+    partesPorClave.set(
+      clave,
+      lista.flatMap((l) =>
+        (l.cv_partes ?? [{ cv: l.cv ?? null, tn: l.stock_actual_tn }]).map((p) => ({
+          lote: l,
+          productor: l.productor,
+          estado: l.estado,
+          fecha_ingreso: l.fecha_ingreso,
+          stock_actual_tn: p.tn,
+          cv: p.cv,
+        }))
+      )
+    )
+  );
   repartirEgresos(
-    lotesPorClave,
+    partesPorClave,
     (egresos ?? []).map((e: any) => ({
       planta_id: e.planta_id,
       producto_id: e.producto_id,
@@ -152,6 +181,25 @@ export default async function StockPage({
       big_bags: e.big_bags,
     }))
   );
+  partesPorClave.forEach((partes) => {
+    const porLote = new Map<LoteDetalle, Parte[]>();
+    partes.forEach((p) => porLote.set(p.lote, [...(porLote.get(p.lote) ?? []), p]));
+    porLote.forEach((ps, l) => {
+      if (!ps.some((p) => p.salidas_tn)) return;
+      l.stock_actual_tn = ps.reduce((a, p) => a + p.stock_actual_tn, 0);
+      l.salidas_tn = ps.reduce((a, p) => a + (p.salidas_tn ?? 0), 0);
+      const salidas: { cv: string | null; tn: number }[] = [];
+      ps.flatMap((p) => p.salidas ?? []).forEach((x) => {
+        const ya = salidas.find((y) => y.cv === x.cv);
+        if (ya) ya.tn += x.tn;
+        else salidas.push({ ...x });
+      });
+      l.salidas = salidas;
+      const bs = ps.map((p) => p.bolsas_salidas).filter(Boolean) as { b25: number; b50: number; bb: number }[];
+      if (bs.length) l.bolsas_salidas = bs.reduce((a, b) => ({ b25: a.b25 + b.b25, b50: a.b50 + b.b50, bb: a.bb + b.bb }));
+      if (l.cv_partes) l.cv_partes = ps.map((p) => ({ cv: p.cv, tn: p.stock_actual_tn })).filter((p) => p.tn > 0.0005);
+    });
+  });
 
   const comprometidoPorClave = new Map<string, number>();
   (comprometido ?? []).forEach((c) => {

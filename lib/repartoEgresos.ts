@@ -1,8 +1,10 @@
 // Las salidas (egresos) se cargan por planta + producto, no sobre un lote.
 // Para que el detalle muestre lo que queda en cada lote, se reparten entre
 // los lotes procesados de esa planta/producto, del más viejo al más nuevo:
-//  - con CV: primero los lotes de ese CV, después los del productor elegido
-//    en el egreso, después los libres (sin CV) y por último cualquiera.
+//  - con CV: primero los lotes de ese CV (procesados y, si no alcanza, también
+//    los naturales de ese CV: ej. CP de un productor comprometidas al CV por
+//    su compra), después los del productor elegido en el egreso, después los
+//    libres (sin CV) y por último cualquiera.
 //  - sin CV: primero los lotes libres del productor, después cualquier lote
 //    del productor, después los libres y por último cualquiera.
 // Lo usan la pantalla de Stock y la carga de egresos (para sugerir el
@@ -43,9 +45,9 @@ export function repartirEgresos<T extends LoteReparto>(
   });
 
   porClave.forEach((lista, clave) => {
-    const procesados = (lotesPorClave.get(clave) ?? [])
-      .filter((l) => l.estado !== "natural")
-      .sort((a, b) => (a.fecha_ingreso < b.fecha_ingreso ? -1 : 1));
+    const todos = [...(lotesPorClave.get(clave) ?? [])].sort((a, b) => (a.fecha_ingreso < b.fecha_ingreso ? -1 : 1));
+    const procesados = todos.filter((l) => l.estado !== "natural");
+    const naturales = todos.filter((l) => l.estado === "natural");
 
     const descontar = (cantidad: number, cv: string | null, candidatos: T[], e: EgresoReparto) => {
       let resto = cantidad;
@@ -72,8 +74,8 @@ export function repartirEgresos<T extends LoteReparto>(
     };
 
     const delProductor = (e: EgresoReparto) => (l: T) => !!e.productor && l.productor === e.productor;
-    const salir = (e: EgresoReparto, filtros: ((l: T) => boolean)[]) => {
-      let resto = e.cantidad;
+    const salir = (e: EgresoReparto, filtros: ((l: T) => boolean)[], primero: T[] = []) => {
+      let resto = descontar(e.cantidad, e.cv, primero, e);
       for (const f of filtros) {
         if (resto <= 0.0000001) break;
         resto = descontar(resto, e.cv, procesados.filter(f), e);
@@ -83,7 +85,11 @@ export function repartirEgresos<T extends LoteReparto>(
     lista
       .filter((e) => e.cv)
       .forEach((e) =>
-        salir(e, [(l) => l.cv === e.cv, delProductor(e), (l: T) => !l.cv, () => true])
+        salir(
+          e,
+          [delProductor(e), (l: T) => !l.cv, () => true],
+          [...procesados.filter((l) => l.cv === e.cv), ...naturales.filter((l) => l.cv === e.cv)]
+        )
       );
     lista
       .filter((e) => !e.cv)
