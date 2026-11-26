@@ -690,8 +690,75 @@ function FormTraslado({ lote, cerrar }: { lote: LoteDetalle; cerrar: () => void 
   const [tn, setTn] = useState(lote.stock_actual_tn.toFixed(3).replace(/\.?0+$/, ""));
   const [fecha, setFecha] = useState(hoy);
   const [cp, setCp] = useState("");
+  const [transporte, setTransporte] = useState({ transportista: "", chofer: "", patente: "" });
+  const [leyendo, setLeyendo] = useState<string | null>(null);
+  const [leido, setLeido] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Completa el traslado con lo que dice la CP (PDF o foto)
+  function aplicarCp(d: {
+    numeroCpe: string | null;
+    fecha: string | null;
+    fechaPartida: string | null;
+    fechaDescarga: string | null;
+    pesoNetoCargaKg: number | null;
+    pesoNetoDescargaKg: number | null;
+    transportista: string | null;
+    chofer: string | null;
+    patente: string | null;
+    destinoNombre: string | null;
+    destino: string | null;
+  }) {
+    if (d.numeroCpe) setCp(d.numeroCpe);
+    const f = d.fechaDescarga ?? d.fechaPartida ?? d.fecha;
+    if (f) setFecha(f);
+    const kg = d.pesoNetoDescargaKg ?? d.pesoNetoCargaKg;
+    if (kg) setTn(String(Math.round(kg) / 1000));
+    setTransporte({ transportista: d.transportista ?? "", chofer: d.chofer ?? "", patente: d.patente ?? "" });
+    const texto = `${d.destinoNombre ?? ""} ${d.destino ?? ""}`.toUpperCase();
+    const planta = plantas.find((p) => p.nombre.length > 2 && texto.includes(p.nombre.toUpperCase()));
+    if (planta) setDestino(planta.id);
+    setLeido(
+      [d.numeroCpe && `CP ${d.numeroCpe}`, kg && `${(kg / 1000).toFixed(3)} tn`, planta && `a ${planta.nombre}`]
+        .filter(Boolean)
+        .join(" · ") || "No encontré datos en la CP"
+    );
+  }
+
+  async function leerPdf(archivo: File) {
+    setLeyendo("Leyendo la CP…");
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("archivo", archivo);
+      const res = await fetch("/api/cp/parse", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok || !json.ok) return setError(json.error ?? "No se pudo leer la CP.");
+      aplicarCp(json.datos);
+    } catch (e) {
+      setError(`No se pudo leer el PDF: ${(e as Error).message}`);
+    } finally {
+      setLeyendo(null);
+    }
+  }
+
+  async function leerFoto(archivo: File) {
+    setLeyendo("Preparando la foto…");
+    setError(null);
+    try {
+      const { leerFotoCp } = await import("@/lib/ocrCpFoto");
+      const d = await leerFotoCp(archivo, setLeyendo);
+      if (!d.numeroCpe && !d.pesoNetoCargaKg && !d.patente) {
+        return setError("No se pudo leer la foto. Probá de nuevo: hoja entera, derecha, de frente y con buena luz.");
+      }
+      aplicarCp(d);
+    } catch (e) {
+      setError(`No se pudo leer la foto: ${(e as Error).message}`);
+    } finally {
+      setLeyendo(null);
+    }
+  }
 
   async function trasladar() {
     const nombre = plantas.find((p) => p.id === destino)?.nombre;
@@ -699,7 +766,7 @@ function FormTraslado({ lote, cerrar }: { lote: LoteDetalle; cerrar: () => void 
     if (!window.confirm(`Se van a trasladar ${tn} tn de ${lote.productor}${lote.cv ? ` (${lote.cv})` : ""} a ${nombre}. ¿Confirmás?`)) return;
     setEnviando(true);
     setError(null);
-    const r = await trasladarLote(lote.lote_id, { plantaDestinoId: destino, cantidad: tn, fecha, numeroCp: cp });
+    const r = await trasladarLote(lote.lote_id, { plantaDestinoId: destino, cantidad: tn, fecha, numeroCp: cp, ...transporte });
     setEnviando(false);
     if (r.ok) {
       cerrar();
@@ -710,6 +777,45 @@ function FormTraslado({ lote, cerrar }: { lote: LoteDetalle; cerrar: () => void 
   return (
     <tr className="bg-sky-50/60 border-t border-sky-100">
       <td colSpan={11} className="px-2 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] mb-2">
+          <span className="text-gray-600">Carta de Porte (opcional):</span>
+          <label className={`px-2 py-1 rounded border bg-white ${leyendo ? "opacity-50" : "cursor-pointer hover:bg-gray-100"}`}>
+            Subir PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              disabled={!!leyendo}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) leerPdf(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <label className={`px-2 py-1 rounded border bg-white ${leyendo ? "opacity-50" : "cursor-pointer hover:bg-gray-100"}`}>
+            📷 Foto de la CP
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              disabled={!!leyendo}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) leerFoto(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {leyendo && <span className="text-gray-500">{leyendo}</span>}
+          {!leyendo && leido && <span className="text-emerald-700">Leído: {leido}. Revisá los datos y tocá Trasladar.</span>}
+          {(transporte.transportista || transporte.chofer || transporte.patente) && (
+            <span className="text-gray-500">
+              {[transporte.transportista, transporte.chofer, transporte.patente].filter(Boolean).join(" · ")}
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap items-end gap-2 text-[11px]">
           <span className="text-gray-600 self-center">Trasladar a</span>
           <select value={destino} onChange={(e) => setDestino(e.target.value)} className="input !py-1 !text-[11px] w-44">
