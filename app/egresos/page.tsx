@@ -27,9 +27,9 @@ export default async function EgresosPage({
     supabase
       .from("movimientos_stock")
       .select(
-        "id, cantidad, fecha, motivo, observaciones, cv, controlo_carga, bolsas_25, bolsas_50, big_bags, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, plantas(nombre), productos(nombre))"
+        "id, tipo, cantidad, fecha, motivo, observaciones, cv, controlo_carga, bolsas_25, bolsas_50, big_bags, numero_cp, transportista, chofer, patente, destino, planta_id, producto_id, productor_id, plantas(nombre), productos(nombre), productores(nombre), lotes!lote_id(planta_id, producto_id, cv, plantas(nombre), productos(nombre), productores(nombre)), destino_lote:lotes!lote_destino_id(plantas(nombre))"
       )
-      .eq("tipo", "egreso")
+      .in("tipo", ["egreso", "traslado"])
       .is("proceso_id", null)
       .order("fecha", { ascending: false })
       .limit(300),
@@ -39,6 +39,8 @@ export default async function EgresosPage({
 
   type Fila = {
     id: string;
+    tipo: string;
+    destino_lote: { plantas: Rel } | null;
     cantidad: number;
     fecha: string;
     motivo: string | null;
@@ -62,8 +64,10 @@ export default async function EgresosPage({
     lotes: {
       planta_id: string;
       producto_id: string;
+      cv: string | null;
       plantas: Rel;
       productos: Rel;
+      productores: Rel;
     } | null;
   };
 
@@ -75,7 +79,7 @@ export default async function EgresosPage({
       return {
         planta: nombreDe(f.lotes.plantas),
         producto: nombreDe(f.lotes.productos),
-        productor: "—",
+        productor: f.tipo === "traslado" ? nombreDe(f.lotes.productores) || "—" : "—",
         planta_id: f.lotes.planta_id,
         producto_id: f.lotes.producto_id,
       };
@@ -98,7 +102,10 @@ export default async function EgresosPage({
     filas = filas.filter((f) => datosFila(f).producto_id === searchParams.producto_id);
   }
 
-  const totalTn = filas.reduce((acc, f) => acc + Number(f.cantidad), 0);
+  // Los traslados entre plantas se ven en la lista pero no suman como salidas
+  const cantTraslados = filas.filter((f) => f.tipo === "traslado").length;
+  const cantSalidas = filas.length - cantTraslados;
+  const totalTn = filas.filter((f) => f.tipo !== "traslado").reduce((acc, f) => acc + Number(f.cantidad), 0);
 
   const textoBolsas = (f: Fila) =>
     [
@@ -112,7 +119,7 @@ export default async function EgresosPage({
   // Totales por CV (toneladas y bolsas)
   const mapaCv = new Map<string, { cv: string; camiones: number; tn: number; b25: number; b50: number; bb: number }>();
   filas.forEach((f) => {
-    if (!f.cv) return;
+    if (!f.cv || f.tipo === "traslado") return;
     const c = mapaCv.get(f.cv) ?? { cv: f.cv, camiones: 0, tn: 0, b25: 0, b50: 0, bb: 0 };
     c.camiones += 1;
     c.tn += Number(f.cantidad);
@@ -188,9 +195,25 @@ export default async function EgresosPage({
                     {f.controlo_carga && <div className="text-gray-500">Controló: {f.controlo_carga}</div>}
                     {!f.numero_cp && !f.transportista && !f.chofer && !f.patente && !f.controlo_carga && "—"}
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{f.destino ?? "—"}</td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {f.tipo === "traslado" ? (
+                      <span className="rounded bg-sky-50 text-sky-800 px-1.5 py-0.5 whitespace-nowrap">
+                        Traslado a {nombreDe(f.destino_lote?.plantas ?? null) || f.destino || "otra planta"}
+                      </span>
+                    ) : (
+                      f.destino ?? "—"
+                    )}
+                  </td>
                   <td className="px-4 py-2">
-                    <CeldaCvEgreso movimientoId={f.id} cv={f.cv} puedeEditar={esAdmin} />
+                    {f.tipo === "traslado" ? (
+                      f.lotes?.cv ? (
+                        <span className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5 whitespace-nowrap">{f.lotes.cv}</span>
+                      ) : (
+                        <span className="text-gray-400">libre</span>
+                      )
+                    ) : (
+                      <CeldaCvEgreso movimientoId={f.id} cv={f.cv} puedeEditar={esAdmin} />
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right font-medium">
                     {Number(f.cantidad).toFixed(2)}
@@ -218,8 +241,9 @@ export default async function EgresosPage({
       </div>
 
       <p className="text-sm text-gray-500 mt-3">
-        Total egresado: {totalTn.toFixed(2)} tn ({filas.length} movimiento
-        {filas.length === 1 ? "" : "s"})
+        Total egresado: {totalTn.toFixed(2)} tn ({cantSalidas} movimiento
+        {cantSalidas === 1 ? "" : "s"}
+        {cantTraslados > 0 && `; además ${cantTraslados} traslado${cantTraslados === 1 ? "" : "s"} entre plantas, que no suman`})
       </p>
       <p className="text-xs text-gray-400 mt-1">
         El destino / motivo y las observaciones son el texto que se escribió al cargar el egreso.

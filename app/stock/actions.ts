@@ -413,6 +413,10 @@ export async function trasladarLote(
           cantidad,
           fecha: datos.fecha,
           numero_cp: numeroCp,
+          transportista: datos.transportista?.trim() || null,
+          chofer: datos.chofer?.trim() || null,
+          patente: datos.patente?.trim() || null,
+          destino,
           observaciones: `Traslado a ${destino}${notaBalanza}`,
           lote_destino_id: nuevo.id,
         });

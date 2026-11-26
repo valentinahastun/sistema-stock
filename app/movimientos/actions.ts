@@ -312,6 +312,18 @@ export async function eliminarMovimiento(movimientoId: string): Promise<Resultad
       return { ok: false, error: "Este movimiento es de un proceso. Borralo o corregilo desde Procesos." };
     }
 
+    // Traslado entre plantas: se borra el ingreso en la planta de destino
+    // (eso borra el lote de destino y el traslado, y el lote vuelve al origen)
+    if (movimiento.tipo === "traslado" && movimiento.lote_destino_id) {
+      const { data: ingresoDestino } = await supabase
+        .from("movimientos_stock")
+        .select("id")
+        .eq("lote_id", movimiento.lote_destino_id)
+        .eq("tipo", "ingreso")
+        .maybeSingle();
+      if (ingresoDestino) return eliminarMovimiento(ingresoDestino.id);
+    }
+
     if (movimiento.tipo === "ingreso") {
       // Ingreso de un lote de descarte generado por la caída de otro lote
       // (ej: Descarte Alubia): se deshace desde el descarte que lo generó,
