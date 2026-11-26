@@ -18,6 +18,7 @@ export type LoteDetalle = {
   bolsas_50?: number | null; // bolsas de 50 kg
   big_bags?: number | null;
   cv?: string | null; // CV al que está comprometido el lote
+  cv_partes?: { cv: string | null; tn: number }[]; // CP cubierta por compras: reparto por CV (de las compras)
   salidas_tn?: number; // egresos (por planta/producto) que se descuentan de este lote
   salidas?: { cv: string | null; tn: number }[]; // a qué CV salió y cuánto
   bolsas_salidas?: { b25: number; b50: number; bb: number }; // bolsas que salieron en egresos (repartidas por tn)
@@ -276,7 +277,7 @@ function DetalleLotes({
   );
 }
 
-// Varias CP en natural del mismo productor (y mismo CV) son un mismo lote:
+// Varias CP en natural del mismo productor son un mismo lote (aunque vayan a CV distintos):
 // van juntas en una fila, para cargar la caída una sola vez. Si entre una CP
 // y la siguiente pasan 15 días o más, es otro lote. Lo demás (procesados,
 // descartes de proceso) sigue fila por fila.
@@ -287,7 +288,7 @@ function agruparLotes(lotes: LoteDetalle[]): LoteDetalle[][] {
   lotes.forEach((l) => {
     const juntable = l.estado === "natural" && !l.tipo_descarte && !l.de_proceso;
     if (!juntable) return grupos.push([l]);
-    const clave = `${l.productor ?? ""}|${l.cv ?? ""}`;
+    const clave = l.productor ?? "";
     porClave.set(clave, [...(porClave.get(clave) ?? []), l]);
   });
   const dia = (f: string) => Date.parse(f + "T00:00:00Z") / 86400000;
@@ -329,12 +330,22 @@ function GrupoLotes({
     .filter((c) => (vistas.has(c.id) ? false : (vistas.add(c.id), true)))
     .slice(0, 3);
   const pcts = Array.from(new Set(lotes.map((l) => l.caida_pct_estimada)));
+  // Reparto por CV de todo el grupo
+  const porCv = new Map<string, number>();
+  lotes.forEach((l) =>
+    (l.cv_partes ?? [{ cv: l.cv ?? null, tn: l.stock_actual_tn }]).forEach((p) =>
+      porCv.set(p.cv ?? "", (porCv.get(p.cv ?? "") ?? 0) + p.tn)
+    )
+  );
+  const partes = Array.from(porCv, ([cv, tn]) => ({ cv: cv || null, tn })).filter((p) => p.tn > 0.0005);
   const junto: LoteDetalle = {
     ...lotes[0],
     numero_cp: null,
     fecha_ingreso: fechas[fechas.length - 1],
     stock_actual_tn: lotes.reduce((acc, l) => acc + l.stock_actual_tn, 0),
     caida_pct_estimada: pcts.length === 1 ? pcts[0] : null,
+    cv: partes.length === 1 ? partes[0].cv : null,
+    cv_partes: partes.length > 1 ? partes : undefined,
     salidas: lotes.flatMap((l) => l.salidas ?? []),
     a_proceso: lotes.flatMap((l) => l.a_proceso ?? []),
     calidades,
@@ -524,7 +535,19 @@ function FilaLote({
         ))}
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
-        {lote.cv ? (
+        {lote.cv_partes && lote.cv_partes.length > 0 ? (
+          <div className="flex flex-col gap-0.5">
+            {lote.cv_partes.map((p) => (
+              <span
+                key={p.cv ?? "libre"}
+                className={p.cv ? "rounded bg-amber-50 text-amber-800 px-1.5 py-0.5" : "text-gray-400"}
+                title={p.cv ? "Comprometido a esa operación (según la compra)" : "Sin CV"}
+              >
+                {p.cv ?? "libre"} · {p.tn.toFixed(2)}
+              </span>
+            ))}
+          </div>
+        ) : lote.cv ? (
           <span className="rounded bg-amber-50 text-amber-800 px-1.5 py-0.5">{lote.cv}</span>
         ) : (
           <span className="text-gray-400">libre</span>

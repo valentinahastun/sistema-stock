@@ -24,10 +24,10 @@ export default async function StockPage({
       supabase
         .from("stock_lotes")
         .select(
-          "lote_id, planta_id, producto_id, productor, numero_cp, estado, fecha_ingreso, caida_pct_estimada, stock_actual_tn"
+          "lote_id, planta_id, producto_id, productor, numero_cp, estado, fecha_ingreso, cantidad_ingresada, caida_pct_estimada, stock_actual_tn"
         )
         .order("fecha_ingreso", { ascending: false }),
-      supabase.from("movimientos_stock").select("lote_id, cantidad, tipo").in("tipo", ["descarte", "cubierto"]),
+      supabase.from("movimientos_stock").select("lote_id, cantidad, tipo, lote_cp_id").in("tipo", ["descarte", "cubierto"]),
       supabase.from("lotes").select("id, cv, bolsas_25, bolsas_50, big_bags, tipo_descarte, proceso_id, procesos!lotes_proceso_id_fkey(numero)"),
       supabase.from("movimientos_stock").select("planta_id, producto_id, cantidad, cv, bolsas_25, bolsas_50, big_bags, productores(nombre)").eq("tipo", "egreso").is("lote_id", null),
       // Lo que entró de cada lote a un proceso
@@ -65,6 +65,29 @@ export default async function StockPage({
     descartePorLote.set(d.lote_id, (descartePorLote.get(d.lote_id) ?? 0) + Number(d.cantidad));
   });
 
+  // CP cubiertas por compras: el CV de cada parte sale de la compra que la cubre;
+  // lo que no cubre ninguna compra va al CV de la CP. Si la CP ya bajó, cada
+  // parte baja en la misma proporción (igual que en stock_comprometido).
+  const cubiertoPorCp = new Map<string, { cv: string | null; tn: number }[]>();
+  (descartes ?? [])
+    .filter((d: any) => d.tipo === "cubierto" && d.lote_cp_id)
+    .forEach((d: any) => {
+      const lista = cubiertoPorCp.get(d.lote_cp_id) ?? [];
+      lista.push({ cv: bolsasPorLote.get(d.lote_id)?.cv ?? null, tn: Number(d.cantidad) });
+      cubiertoPorCp.set(d.lote_cp_id, lista);
+    });
+  const partesCv = (l: any): { cv: string | null; tn: number }[] | undefined => {
+    const cub = cubiertoPorCp.get(l.lote_id);
+    const ingresada = Number(l.cantidad_ingresada);
+    if (!cub || !(ingresada > 0)) return undefined;
+    const factor = Math.max(Number(l.stock_actual_tn), 0) / ingresada;
+    const cubiertoTn = cub.reduce((a, c) => a + c.tn, 0);
+    const partes = [...cub, { cv: bolsasPorLote.get(l.lote_id)?.cv ?? null, tn: Math.max(ingresada - cubiertoTn, 0) }];
+    const porCv = new Map<string, number>();
+    partes.forEach((p) => porCv.set(p.cv ?? "", (porCv.get(p.cv ?? "") ?? 0) + p.tn * factor));
+    return Array.from(porCv, ([cv, tn]) => ({ cv: cv || null, tn })).filter((p) => p.tn > 0.0005);
+  };
+
   const lotesPorClave = new Map<string, LoteDetalle[]>();
   (lotes ?? []).forEach((l: any) => {
     const clave = `${l.planta_id}-${l.producto_id}`;
@@ -87,6 +110,7 @@ export default async function StockPage({
       bolsas_50: bolsasPorLote.get(l.lote_id)?.bolsas_50 ?? null,
       big_bags: bolsasPorLote.get(l.lote_id)?.big_bags ?? null,
       cv: bolsasPorLote.get(l.lote_id)?.cv ?? null,
+      cv_partes: partesCv(l),
       de_proceso: extra?.proceso_id ? numeroDe(extra.procesos) : null,
       a_proceso: aProc ?? [],
       tipo_descarte: extra?.tipo_descarte ?? null,
