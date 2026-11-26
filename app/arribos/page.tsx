@@ -71,11 +71,14 @@ export default async function ArribosPage() {
     };
   });
 
-  const conDif = filas.filter((f) => f.estado === "diferencia").sort((a, b) => (a.reclamo_estado === "resuelto" ? 1 : 0) - (b.reclamo_estado === "resuelto" ? 1 : 0));
+  // Una diferencia ya resuelta pasa a "Arribados OK" (con la nota de lo que faltó o sobró)
+  const conDif = filas.filter((f) => f.estado === "diferencia" && f.reclamo_estado !== "resuelto");
   const enViaje = filas.filter((f) => f.estado === "en_viaje");
-  const ok = filas.filter((f) => f.estado === "ok");
+  const ok = filas
+    .filter((f) => f.estado === "ok" || (f.estado === "diferencia" && f.reclamo_estado === "resuelto"))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
   const noAplica = filas.filter((f) => f.estado === "no_aplica");
-  const aReclamarKg = conDif.filter((f) => f.reclamo_estado !== "resuelto").reduce((s, f) => s + Math.max(f.dif ?? 0, 0), 0);
+  const aReclamarKg = conDif.reduce((s, f) => s + Math.max(f.dif ?? 0, 0), 0);
 
   return (
     <div className="space-y-6">
@@ -91,7 +94,7 @@ export default async function ArribosPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Cuadro t="En viaje" v={enViaje.length} clase="text-sky-700" />
-        <Cuadro t="Con diferencia" v={conDif.filter((f) => f.reclamo_estado !== "resuelto").length} clase="text-red-600" />
+        <Cuadro t="Con diferencia" v={conDif.length} clase="text-red-600" />
         <Cuadro t="Kg a reclamar" v={aReclamarKg.toLocaleString("es-AR")} clase="text-red-600" />
         <Cuadro t="Arribados OK" v={ok.length} clase="text-green-700" />
       </div>
@@ -134,11 +137,20 @@ export default async function ArribosPage() {
         {ok.length > 0 && (
           <Tabla
             filas={ok}
-            extra={(f) => (
-              <span className="text-green-700">
-                {f.dif === 0 ? "justo" : `${(f.dif ?? 0) > 0 ? "−" : "+"}${Math.abs(f.dif ?? 0)} kg`}
-              </span>
-            )}
+            extra={(f) =>
+              f.estado === "diferencia" ? (
+                <div className="space-y-1">
+                  <div className="text-green-700">
+                    {(f.dif ?? 0) > 0 ? "Faltaron" : "Sobraron"} {Math.abs(f.dif ?? 0).toLocaleString("es-AR")} kg · resuelto
+                  </div>
+                  {esAdmin && <Reclamo id={f.id} estado={f.reclamo_estado} a={f.reclamo_a} nota={f.reclamo_nota} />}
+                </div>
+              ) : (
+                <span className="text-green-700">
+                  {f.dif === 0 ? "justo" : `${(f.dif ?? 0) > 0 ? "−" : "+"}${Math.abs(f.dif ?? 0)} kg`}
+                </span>
+              )
+            }
           />
         )}
       </Grupo>
