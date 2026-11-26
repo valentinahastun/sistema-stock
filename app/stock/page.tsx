@@ -1,3 +1,4 @@
+import { armarCubiertoPorCp, partesCvDeLote } from "@/lib/cvPartes";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
@@ -68,25 +69,13 @@ export default async function StockPage({
   // CP cubiertas por compras: el CV de cada parte sale de la compra que la cubre;
   // lo que no cubre ninguna compra va al CV de la CP. Si la CP ya bajó, cada
   // parte baja en la misma proporción (igual que en stock_comprometido).
-  const cubiertoPorCp = new Map<string, { cv: string | null; tn: number }[]>();
-  (descartes ?? [])
-    .filter((d: any) => d.tipo === "cubierto" && d.lote_cp_id)
-    .forEach((d: any) => {
-      const lista = cubiertoPorCp.get(d.lote_cp_id) ?? [];
-      lista.push({ cv: bolsasPorLote.get(d.lote_id)?.cv ?? null, tn: Number(d.cantidad) });
-      cubiertoPorCp.set(d.lote_cp_id, lista);
-    });
-  const partesCv = (l: any): { cv: string | null; tn: number }[] | undefined => {
-    const cub = cubiertoPorCp.get(l.lote_id);
-    const ingresada = Number(l.cantidad_ingresada);
-    if (!cub || !(ingresada > 0)) return undefined;
-    const factor = Math.max(Number(l.stock_actual_tn), 0) / ingresada;
-    const cubiertoTn = cub.reduce((a, c) => a + c.tn, 0);
-    const partes = [...cub, { cv: bolsasPorLote.get(l.lote_id)?.cv ?? null, tn: Math.max(ingresada - cubiertoTn, 0) }];
-    const porCv = new Map<string, number>();
-    partes.forEach((p) => porCv.set(p.cv ?? "", (porCv.get(p.cv ?? "") ?? 0) + p.tn * factor));
-    return Array.from(porCv, ([cv, tn]) => ({ cv: cv || null, tn })).filter((p) => p.tn > 0.0005);
-  };
+  const cvDe = new Map<string, string | null>(Array.from(bolsasPorLote, ([id, b]) => [id, b.cv]));
+  const cubiertoPorCp = armarCubiertoPorCp(
+    (descartes ?? []).filter((d: any) => d.tipo === "cubierto"),
+    cvDe
+  );
+  const partesCv = (l: any) =>
+    partesCvDeLote({ ...l, cv: bolsasPorLote.get(l.lote_id)?.cv ?? null }, cubiertoPorCp);
 
   const lotesPorClave = new Map<string, LoteDetalle[]>();
   (lotes ?? []).forEach((l: any) => {

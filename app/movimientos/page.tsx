@@ -1,3 +1,4 @@
+import { armarCubiertoPorCp, partesCvDeLote } from "@/lib/cvPartes";
 import { createClient } from "@/lib/supabase/server";
 import { getPerfilActual } from "@/lib/supabase/profile";
 import { repartirEgresos } from "@/lib/repartoEgresos";
@@ -33,6 +34,7 @@ export default async function MovimientosPage() {
     { data: stockLotes },
     { data: lotesCv },
     { data: egresos },
+    { data: cubiertos },
   ] = await Promise.all([
       supabase.from("plantas").select("id, nombre").order("nombre"),
       supabase.from("productos").select("id, nombre").order("nombre"),
@@ -46,13 +48,14 @@ export default async function MovimientosPage() {
         .order("fecha", { ascending: false })
         .limit(100),
       supabase.from("stock_consolidado").select("planta_id, producto_id, stock_disponible_tn"),
-      supabase.from("stock_lotes").select("lote_id, planta_id, producto_id, productor, estado, fecha_ingreso, stock_actual_tn").gt("stock_actual_tn", 0.0005),
+      supabase.from("stock_lotes").select("lote_id, planta_id, producto_id, productor, estado, fecha_ingreso, cantidad_ingresada, stock_actual_tn").gt("stock_actual_tn", 0.0005),
       supabase.from("lotes").select("id, cv").not("cv", "is", null),
       supabase
         .from("movimientos_stock")
         .select("planta_id, producto_id, cantidad, cv, productores(nombre)")
         .eq("tipo", "egreso")
         .is("lote_id", null),
+      supabase.from("movimientos_stock").select("lote_id, lote_cp_id, cantidad").eq("tipo", "cubierto"),
     ]);
 
   // Stock de cada lote con su productor y CV, después de repartir las
@@ -61,19 +64,23 @@ export default async function MovimientosPage() {
   const idProductor = new Map((productores ?? []).map((p) => [p.nombre, p.id]));
   const cvDeLote = new Map((lotesCv ?? []).map((l: any) => [l.id, l.cv as string]));
   const lotesPorClave = new Map<string, any[]>();
+  // Una CP cubierta por compras de CV distintos va partida por CV (como en Stock)
+  const cubiertoPorCp = armarCubiertoPorCp((cubiertos ?? []) as any[], cvDeLote);
   (stockLotes ?? []).forEach((l: any) => {
     const clave = `${l.planta_id}-${l.producto_id}`;
+    const cv = cvDeLote.get(l.lote_id) ?? null;
+    const partes = partesCvDeLote({ ...l, cv }, cubiertoPorCp) ?? [{ cv, tn: Number(l.stock_actual_tn) }];
     lotesPorClave.set(clave, [
       ...(lotesPorClave.get(clave) ?? []),
-      {
+      ...partes.map((p) => ({
         planta_id: l.planta_id,
         producto_id: l.producto_id,
         productor: l.productor,
         estado: l.estado,
         fecha_ingreso: l.fecha_ingreso,
-        stock_actual_tn: Number(l.stock_actual_tn),
-        cv: cvDeLote.get(l.lote_id) ?? null,
-      },
+        stock_actual_tn: p.tn,
+        cv: p.cv,
+      })),
     ]);
   });
   repartirEgresos(
