@@ -235,6 +235,13 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
         error: `No hay suficiente stock en esa planta/producto: hay ${disponible.toFixed(3)} tn y la CP supera el stock por ${excesoKg} kg (se aceptan hasta 200 kg de diferencia de balanza).`,
       };
     }
+    // Para menos: si sin CV la salida deja hasta 200 kg en la planta, sale todo
+    const restoKg = Math.round((disponible - cantidad) * 1000);
+    if (!cv && restoKg > 0 && restoKg <= 200) {
+      cantidadFinal = Math.round(disponible * 1000) / 1000;
+      const nota = `Según la CP salieron ${cantidad.toFixed(3)} tn: quedaban ${restoKg} kg de diferencia de balanza, se descontó todo el stock (${cantidadFinal.toFixed(3)} tn).`;
+      obsFinal = observaciones ? `${observaciones} · ${nota}` : nota;
+    }
     if (excesoKg > 0) {
       cantidadFinal = Math.round(disponible * 1000) / 1000;
       if (cantidadFinal <= 0) {
@@ -265,6 +272,11 @@ export async function crearEgreso(formData: FormData): Promise<Resultado> {
 
     if (error) {
       return { ok: false, error: error.message };
+    }
+
+    // Con CV: si a ese CV le quedan hasta 200 kg en la planta, se suman a esta salida
+    if (cv) {
+      await supabase.rpc("ajustar_resto_cv", { p_planta: planta_id, p_producto: producto_id, p_cv: cv });
     }
 
     revalidatePath("/");
