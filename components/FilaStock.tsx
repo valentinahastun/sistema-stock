@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
-import { confirmarCaidaEstimada, confirmarCaidaGrupo, guardarBolsas } from "@/app/stock/actions";
+import { confirmarCaidaEstimada, confirmarCaidaGrupo, guardarBolsas, trasladarLote } from "@/app/stock/actions";
+
+// Plantas para elegir el destino de un traslado
+const PlantasCtx = createContext<{ id: string; nombre: string }[]>([]);
 import { NOMBRE_TIPO_DESCARTE } from "@/lib/procesos";
 
 export type LoteDetalle = {
@@ -50,10 +53,12 @@ export default function StockAgrupado({
   filas,
   lotesPorClave,
   puedeEditar,
+  plantas = [],
 }: {
   filas: FilaBase[];
   lotesPorClave: Map<string, LoteDetalle[]>;
   puedeEditar: boolean;
+  plantas?: { id: string; nombre: string }[];
 }) {
   const [modo, setModo] = useState<Modo>("planta");
 
@@ -77,6 +82,7 @@ export default function StockAgrupado({
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   return (
+    <PlantasCtx.Provider value={plantas}>
     <div>
       <div className="flex items-center justify-end gap-2 mb-2 text-sm">
         <span className="text-gray-500">Agrupar por:</span>
@@ -131,6 +137,7 @@ export default function StockAgrupado({
         </table>
       </div>
     </div>
+    </PlantasCtx.Provider>
   );
 }
 
@@ -401,6 +408,7 @@ function FilaLote({
   const [tnRaw, setTnRaw] = useState("");
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trasladando, setTrasladando] = useState(false);
 
   function onChangePct(v: string) {
     setModo(v === "" ? null : "pct");
@@ -490,6 +498,7 @@ function FilaLote({
   const puedeCargar = esNatural && puedeEditar;
 
   return (
+    <>
     <tr
       className={`align-top ${
         dentroDeGrupo ? "border-t border-gray-100 bg-white text-gray-500" : "border-t border-gray-200"
@@ -588,6 +597,16 @@ function FilaLote({
             ))}
           </div>
         ) : null}
+        {puedeEditar && !grupo && lote.stock_actual_tn > 0.0005 && (
+          <button
+            type="button"
+            onClick={() => setTrasladando((v) => !v)}
+            className="block ml-auto text-[10px] text-brand-navy hover:underline"
+            title="Mover este lote a otra planta (no es una salida a una operación)"
+          >
+            {trasladando ? "Cancelar traslado" : "Trasladar"}
+          </button>
+        )}
       </td>
       {!esDescarte && (
         <>
@@ -655,6 +674,78 @@ function FilaLote({
           </td>
         </>
       )}
+    </tr>
+    {trasladando && (
+      <FormTraslado lote={lote} cerrar={() => setTrasladando(false)} />
+    )}
+    </>
+  );
+}
+
+function FormTraslado({ lote, cerrar }: { lote: LoteDetalle; cerrar: () => void }) {
+  const router = useRouter();
+  const plantas = useContext(PlantasCtx);
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const [destino, setDestino] = useState("");
+  const [tn, setTn] = useState(lote.stock_actual_tn.toFixed(3).replace(/\.?0+$/, ""));
+  const [fecha, setFecha] = useState(hoy);
+  const [cp, setCp] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function trasladar() {
+    const nombre = plantas.find((p) => p.id === destino)?.nombre;
+    if (!nombre) return setError("Elegí la planta de destino.");
+    if (!window.confirm(`Se van a trasladar ${tn} tn de ${lote.productor}${lote.cv ? ` (${lote.cv})` : ""} a ${nombre}. ¿Confirmás?`)) return;
+    setEnviando(true);
+    setError(null);
+    const r = await trasladarLote(lote.lote_id, { plantaDestinoId: destino, cantidad: tn, fecha, numeroCp: cp });
+    setEnviando(false);
+    if (r.ok) {
+      cerrar();
+      router.refresh();
+    } else setError(r.error);
+  }
+
+  return (
+    <tr className="bg-sky-50/60 border-t border-sky-100">
+      <td colSpan={11} className="px-2 py-2">
+        <div className="flex flex-wrap items-end gap-2 text-[11px]">
+          <span className="text-gray-600 self-center">Trasladar a</span>
+          <select value={destino} onChange={(e) => setDestino(e.target.value)} className="input !py-1 !text-[11px] w-44">
+            <option value="">Planta de destino…</option>
+            {plantas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre}
+              </option>
+            ))}
+          </select>
+          <label className="flex flex-col">
+            <span className="text-gray-500">Toneladas</span>
+            <input type="number" step="0.001" min="0" value={tn} onChange={(e) => setTn(e.target.value)} className="input !py-1 !text-[11px] w-24" />
+          </label>
+          <label className="flex flex-col">
+            <span className="text-gray-500">Fecha</span>
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="input !py-1 !text-[11px]" />
+          </label>
+          <label className="flex flex-col">
+            <span className="text-gray-500">CP (opcional)</span>
+            <input value={cp} onChange={(e) => setCp(e.target.value)} className="input !py-1 !text-[11px] w-36" placeholder="00000-00000000" />
+          </label>
+          <button
+            type="button"
+            onClick={trasladar}
+            disabled={enviando}
+            className="text-white bg-brand-green hover:bg-brand-green-dark rounded px-3 py-1 disabled:opacity-40"
+          >
+            {enviando ? "Trasladando…" : "Trasladar"}
+          </button>
+          <span className="text-gray-500 self-center">
+            Queda en la otra planta con el mismo productor, estado y CV. No cuenta como salida.
+          </span>
+          {error && <span className="text-red-600 self-center">{error}</span>}
+        </div>
+      </td>
     </tr>
   );
 }

@@ -259,6 +259,7 @@ export default async function StockPage({
           filas={filas}
           lotesPorClave={lotesPorClave}
           puedeEditar={puedeEditar}
+          plantas={(plantas ?? []).map((p: any) => ({ id: p.id, nombre: p.nombre }))}
         />
       </div>
 

@@ -321,3 +321,91 @@ export async function guardarBolsas(
     return { ok: false, error: (e as Error).message };
   }
 }
+
+// Traslado de un lote a otra planta (ej.: a reprocesar). No es una salida a
+// una operación: el lote baja en la planta de origen ("traslado") y aparece
+// igual (productor, producto, estado, CV) en la de destino.
+export async function trasladarLote(
+  loteId: string,
+  datos: { plantaDestinoId: string; cantidad: string; fecha: string; numeroCp: string }
+): Promise<Resultado> {
+  try {
+    const perfil = await getPerfilActual();
+    if (!perfil || perfil.rol !== "admin") {
+      return { ok: false, error: "Solo el usuario administrador puede trasladar." };
+    }
+    const supabase = createClient();
+    const cantidad = Math.round(Number(datos.cantidad) * 1000) / 1000;
+    if (!datos.plantaDestinoId) return { ok: false, error: "Elegí la planta de destino." };
+    if (!(cantidad > 0)) return { ok: false, error: "Las toneladas tienen que ser mayores a 0." };
+    if (!datos.fecha) return { ok: false, error: "Falta la fecha." };
+
+    const { data: lote } = await supabase.from("lotes").select("*").eq("id", loteId).single();
+    if (!lote) return { ok: false, error: "No se encontró el lote." };
+    if (lote.planta_id === datos.plantaDestinoId) return { ok: false, error: "La planta de destino es la misma." };
+
+    const [{ data: sl }, { data: cons }, { data: plantas }] = await Promise.all([
+      supabase.from("stock_lotes").select("stock_actual_tn").eq("lote_id", loteId).single(),
+      supabase
+        .from("stock_consolidado")
+        .select("stock_disponible_tn")
+        .eq("planta_id", lote.planta_id)
+        .eq("producto_id", lote.producto_id)
+        .maybeSingle(),
+      supabase.from("plantas").select("id, nombre").in("id", [lote.planta_id, datos.plantaDestinoId]),
+    ]);
+    const maximo = Math.min(Number(sl?.stock_actual_tn ?? 0), Number(cons?.stock_disponible_tn ?? 0));
+    if (cantidad > maximo + 0.0005) {
+      return { ok: false, error: `No puede superar el stock del lote (${maximo.toFixed(2)} tn).` };
+    }
+    const nombre = (id: string) => plantas?.find((p) => p.id === id)?.nombre ?? "otra planta";
+    const origen = nombre(lote.planta_id);
+    const destino = nombre(datos.plantaDestinoId);
+    const numeroCp = datos.numeroCp.trim() || null;
+
+    const { data: nuevo, error: e1 } = await supabase
+      .from("lotes")
+      .insert({
+        planta_id: datos.plantaDestinoId,
+        producto_id: lote.producto_id,
+        productor_id: lote.productor_id,
+        estado: lote.estado,
+        cv: lote.cv,
+        tipo_descarte: lote.tipo_descarte ?? null,
+        numero_cp: numeroCp,
+        fecha_ingreso: datos.fecha,
+        cantidad_ingresada: cantidad,
+      })
+      .select("id")
+      .single();
+    if (e1 || !nuevo) return { ok: false, error: e1?.message ?? "No se pudo crear el lote en destino." };
+
+    const { error: e2 } = await supabase.from("movimientos_stock").insert({
+      lote_id: nuevo.id,
+      tipo: "ingreso",
+      cantidad,
+      fecha: datos.fecha,
+      observaciones: `Traslado desde ${origen}${numeroCp ? ` (CP ${numeroCp})` : ""}`,
+    });
+    const { error: e3 } = e2
+      ? { error: e2 }
+      : await supabase.from("movimientos_stock").insert({
+          lote_id: loteId,
+          tipo: "traslado",
+          cantidad,
+          fecha: datos.fecha,
+          numero_cp: numeroCp,
+          observaciones: `Traslado a ${destino}`,
+          lote_destino_id: nuevo.id,
+        });
+    if (e2 || e3) {
+      await supabase.from("movimientos_stock").delete().eq("lote_id", nuevo.id);
+      await supabase.from("lotes").delete().eq("id", nuevo.id);
+      return { ok: false, error: (e2 ?? e3)!.message };
+    }
+    revalidarStock();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
