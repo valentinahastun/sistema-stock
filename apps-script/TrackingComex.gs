@@ -594,6 +594,15 @@ function leerMails() {
       if (info[i].cambios === undefined) info[i].cambios = CAMBIOS_DRAFTS.test(sinAcentos(textoPropio(info[i].x.getPlainBody() || '')));
       return info[i].cambios;
     };
+    // Mensajes del equipo con algún documento adjunto (no imágenes)
+    const conDocs = i => {
+      if (!info[i].eq) return false;
+      if (info[i].docs === undefined) {
+        info[i].docs = info[i].x.getAttachments({ includeInlineImages: false })
+          .some(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a.getName()) && esAdjuntoDocumento(a.getName()));
+      }
+      return info[i].docs;
+    };
     todos.forEach((m, j) => {
     if (m.getDate() < desde) return;
     const de = direcciones(m.getFrom())[0] || '';
@@ -615,12 +624,16 @@ function leerMails() {
       ddeeHilo,
       // Cliente que pide cambios después de que le mandamos drafts en este hilo
       trasDrafts: !info[j].eq && pideCambios(j) && info.some((_, i) => i < j && esJuego(i)),
-      // Juego de drafts del equipo que sale después de que el cliente pidió cambios
-      reenvio: info[j].eq && (() => {
-        let previo = -1;
-        for (let i = j - 1; i >= 0; i--) if (esJuego(i)) { previo = i; break; }
-        if (previo < 0) return false;
-        for (let k = previo + 1; k < j; k++) if (pideCambios(k)) return true;
+      // Respuesta del equipo con documentos (todos los drafts o solo el corregido, ej. la
+      // factura) después de que el cliente pidió cambios en los drafts que le mandamos
+      reenvio: info[j].eq && conDocs(j) && (() => {
+        let k = -1;
+        for (let i = j - 1; i >= 0; i--) {
+          if (conDocs(i)) break;              // ya se había respondido con documentos
+          if (pideCambios(i)) { k = i; break; }
+        }
+        if (k < 0) return false;
+        for (let i = k - 1; i >= 0; i--) if (esJuego(i)) return true;
         return false;
       })(),
       draftsPrevios: MAIL.EQUIPO.indexOf(de) < 0 && APROBACION_CORTA.test((texto.split('\n').find(l => l.trim()) || '').trim())
@@ -767,6 +780,16 @@ function analizarMensajes(msgs, terrestres) {
     }
     reglasTerrestres(m, cvMail, add, delEquipo, terrestres);
 
+    // Reenvío de drafts corregidos (todos o solo el documento que cambió) después de que
+    // el cliente pidió cambios
+    if (delEquipo(m) && m.reenvio && m.para.some(esCliente)) {
+      const cvR = cvDeAsunto(asunto) || cvMail;
+      const doc = m.adjuntos.filter(a => !/\.(png|jpe?g|gif|bmp)$/i.test(a))[0] || '';
+      add(Object.assign({}, m, { id: m.id + '-reenvio' }), 'draft_reenviado', cvR, !!cvR,
+        cvR ? 'Drafts corregidos reenviados a ' + m.para.filter(esCliente)[0] + (doc ? ' (' + doc + ')' : '')
+          : 'Drafts reenviados sin CV en el asunto');
+    }
+
     // Draft del BL mandado a ISB para que haga sus drafts (peso y calidad, fumigación)
     if (delEquipo(m) && m.para.some(e => /isbargentina/i.test(e)) &&
         ((m.adjuntos || []).some(a => esAdjuntoDraftBl(a) || CODIGO_BL.test(a) || /(^|[^a-z])b\/?l([^a-z]|$)/i.test(a)) ||
@@ -883,11 +906,6 @@ function analizarMensajes(msgs, terrestres) {
       const cual = m.adjuntos.filter(esAdjuntoDraft)[0] || docs[0];
       add(m, 'draft_enviado', cv, !!cv, cv ? 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + ')'
         : 'Drafts enviados a ' + m.para.filter(esCliente)[0] + ' (' + cual + '), sin CV en el asunto');
-      // Si antes el cliente había pedido cambios, es el reenvío con las correcciones
-      if (m.reenvio) {
-        add(Object.assign({}, m, { id: m.id + '-reenvio' }), 'draft_reenviado', cv, !!cv,
-          cv ? 'Drafts corregidos reenviados a ' + m.para.filter(esCliente)[0] : 'Drafts reenviados sin CV en el asunto');
-      }
     }
   });
 
