@@ -38,6 +38,8 @@ const CONFIG = {
 
   MAIL_DESTINATARIOS: ['valentinahastun@argreen.com.ar', 'lourdesfioretti@argreen.com.ar'],
   HORA_MAIL: 8,
+  // Mail diario con las alertas: apagado (el equipo mira la página directamente). true para volver a mandarlo.
+  MAIL_DIARIO: false,
 
   VEN: { hoja: 'VENTAS', fila: 2, fecha: 'A', cv: 'B', firmado: 'C', producto: 'D', tn: 'G',
          buyer: 'K', importador: 'O', payment: 'V', destino: 'X' },
@@ -67,8 +69,9 @@ function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('sincronizar').timeBased().everyMinutes(15).create();
   ScriptApp.newTrigger('leerCarpetas').timeBased().everyHours(1).create();
-  ScriptApp.newTrigger('mailDiario').timeBased().everyDays(1).atHour(CONFIG.HORA_MAIL).create();
-  Logger.log('Listo: sincronización cada 15 minutos, carpetas de Drive cada hora y mail diario a las ' + CONFIG.HORA_MAIL + ' h.');
+  if (CONFIG.MAIL_DIARIO) ScriptApp.newTrigger('mailDiario').timeBased().everyDays(1).atHour(CONFIG.HORA_MAIL).create();
+  Logger.log('Listo: sincronización cada 15 minutos, carpetas de Drive cada hora' +
+    (CONFIG.MAIL_DIARIO ? ' y mail diario a las ' + CONFIG.HORA_MAIL + ' h.' : ' (sin mail diario).'));
 }
 
 // ============================================================
@@ -353,6 +356,7 @@ function armarDatos(t) {
 // MAIL DIARIO
 // ============================================================
 function mailDiario() {
+  if (!CONFIG.MAIL_DIARIO) return;   // apagado: miran la página directamente
   const token = prop('TOKEN_SYNC');
   const alertas = rpc('op_alertas_token', { p_token: token }).filter(a => a.en_mail);
   let agenda = [];
