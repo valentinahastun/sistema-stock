@@ -1087,7 +1087,9 @@ const DRAFTS_DRIVE = [
   { re: /solicitud(es)?\s*de\s*certificados?/i, paso: 'dr_fito' },
   { re: /(^|[^a-z])h?bl([^a-z]|$)|^copy_|bill of lading|cme\d{5,}/i, paso: 'dr_bl' },
   { re: CODIGO_BL, paso: 'dr_bl' },
-  { re: /^pl\b|packing/i, paso: 'dr_pl' },
+  // "DRAFT BUE600240100.pdf", "Draft 279800055.pdf", "xxx_VerifyCopy.pdf": draft del BL con el número de booking o BL
+  { re: { test: n => esAdjuntoDraftBl(n) }, paso: 'dr_bl' },
+  { re: /^((draft|borrador)\s*)?pl\b|packing/i, paso: 'dr_pl' },
   { re: /^ogm\b|(^|[^a-z])gmo([^a-z]|$)/i, paso: 'dr_gmo' },
   { re: /^(?!.*(proforma|silver)).*(^\d{11}_019_|factura|invoice)/i, paso: 'dr_factura' },   // la proforma no cuenta
   { re: /silver\s+invoice/i, paso: 'dr_factura_silver' },
@@ -1149,6 +1151,9 @@ function leerCarpetas() {
             if (d.re.test(nombre)) items.push({ clave: o.clave, paso: d.paso, detalle: nombre, url: a.getUrl(),
               fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
           });
+          // El draft del BL a veces queda en la carpeta principal ("DRAFT BUE600240100.pdf")
+          if (esAdjuntoDraftBl(nombre)) items.push({ clave: o.clave, paso: 'dr_bl', detalle: nombre, url: a.getUrl(),
+            fecha: Utilities.formatDate(a.getDateCreated(), zona, 'yyyy-MM-dd') });
           // Terrestres: no arman DOCUS EXPO, los originales van en la carpeta principal.
           // Los borradores (CCET_MERCOSUR, SolicitudesDeCertificados, 26AR…) no cuentan.
           if (CONFIG.TERRESTRE.test(o.destino || '') && !/ccet_mercosur|solicitud(es)?\s*de\s*certificados?|^\d{2}AR\d{6}|draft|borrador/i.test(nombre)) {
